@@ -112,6 +112,8 @@ function creerFenetre({ visible }) {
 
   // Fermer = masquer ; on quitte seulement depuis l'icône près de l'horloge.
   fenetre.on('close', (e) => { if (!quitter) { e.preventDefault(); fenetre.hide(); } });
+  fenetre.on('hide', () => installerMaj());
+  fenetre.on('blur', () => installerMaj());
 
   fenetre.once('ready-to-show', () => {
     if (visible === 'actif') { fenetre.show(); fenetre.focus(); }
@@ -180,9 +182,40 @@ function creerIcone() {
 
 // ---------- mises à jour de l'appli Windows ----------
 // La liste elle-même vient du site : elle est toujours à jour. Ceci ne concerne que le panneau.
+// Journal des mises à jour (%APPDATA%\Tâches\maj.log), pour comprendre un éventuel souci.
+function journal(niveau, ...msg) {
+  const ligne = `${new Date().toISOString()} ${niveau} ${msg.map(String).join(' ')}\n`;
+  try { fs.appendFileSync(path.join(app.getPath('userData'), 'maj.log'), ligne); } catch { /* sans gravité */ }
+}
+autoUpdater.logger = {
+  info: (...m) => journal('info', ...m), warn: (...m) => journal('warn', ...m),
+  error: (...m) => journal('erreur', ...m), debug: () => {},
+};
+
+// Une mise à jour téléchargée s'installe tout de suite (en silence, puis le panneau se relance),
+// dès que le panneau n'est pas en cours d'utilisation. On ne compte pas sur « à la fermeture ».
+let majPrete = false;
+function installerMaj() {
+  if (!majPrete) return;
+  if (fenetre && fenetre.isVisible() && fenetre.isFocused()) return; // on attend que le panneau soit laissé
+  majPrete = false;
+  journal('info', 'installation de la mise à jour');
+  quitter = true;
+  globalShortcut.unregisterAll();
+  if (icone) icone.destroy();
+  setImmediate(() => autoUpdater.quitAndInstall(true, true));
+}
+autoUpdater.on('update-downloaded', (info) => {
+  journal('info', 'mise à jour téléchargée', info && info.version);
+  majPrete = true;
+  installerMaj();
+});
+autoUpdater.on('error', (err) => journal('erreur', err && (err.stack || err.message)));
+
 function verifierMisesAJour() {
   if (!app.isPackaged) return;
-  autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+  journal('info', 'version', app.getVersion(), ': recherche de mise à jour');
+  autoUpdater.checkForUpdates().catch((err) => journal('erreur', err && err.message));
 }
 
 // ---------- démarrage ----------
