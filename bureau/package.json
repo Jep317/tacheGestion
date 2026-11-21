@@ -1,7 +1,7 @@
 {
   "name": "taches-bureau",
   "productName": "Tâches",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Panneau Tâches sur le bureau Windows",
   "author": "Jep317",
   "main": "main.js",
@@ -50,7 +50,7 @@
       "identityName": "Jep31.MesTaches",
       "publisher": "CN=90033335-D602-464A-88E6-FCFD32B92571",
       "publisherDisplayName": "Jep31",
-      "displayName": "Mes Tâches",
+      "displayName": "MesTaches",
       "applicationId": "Taches",
       "backgroundColor": "#2f6f5e",
       "languages": [
