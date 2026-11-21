@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Tâches</title>
+  <meta name="theme-color" content="#2f6f5e">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Connexion -->
+  <main id="ecran-connexion" class="connexion" hidden>
+    <h1>Tâches</h1>
+    <p class="discret">Connecte-toi pour voir ta liste.</p>
+    <form id="form-connexion">
+      <input id="email" type="email" autocomplete="email" placeholder="Adresse e-mail" required>
+      <input id="mdp" type="password" autocomplete="current-password" placeholder="Mot de passe" minlength="8" required>
+      <button type="submit" class="principal">Se connecter</button>
+      <button type="button" id="btn-inscription" class="lien">Première fois ? Créer mon compte</button>
+    </form>
+    <p id="msg-connexion" class="message" role="status"></p>
+  </main>
+
+  <!-- Appli -->
+  <div id="ecran-appli" hidden>
+    <header class="entete">
+      <nav class="onglets" role="tablist">
+        <button role="tab" data-vue="liste" aria-selected="true">Liste</button>
+        <button role="tab" data-vue="notes" aria-selected="false">Notes</button>
+      </nav>
+      <div class="espaces" role="group" aria-label="Espace">
+        <button data-espace="tout" aria-pressed="true">Tout</button>
+        <button data-espace="perso" aria-pressed="false">Perso</button>
+        <button data-espace="famille" aria-pressed="false">Famille</button>
+      </div>
+    </header>
+
+    <main id="contenu">
+      <section id="vue-liste"></section>
+      <section id="vue-notes" hidden>
+        <input id="recherche" type="search" placeholder="Rechercher dans les notes et idées">
+        <div id="liste-notes"></div>
+      </section>
+    </main>
+
+    <form id="form-ajout" class="ajout">
+      <textarea id="saisie" rows="1" placeholder="Ajouter en vrac…" enterkeyhint="send"></textarea>
+      <button type="button" id="btn-micro" class="rond" aria-label="Dicter" title="Dicter">🎤</button>
+      <button type="submit" class="rond principal" aria-label="Ajouter" title="Ajouter">➤</button>
+    </form>
+
+    <footer class="pied">
+      <button id="btn-deconnexion" class="lien">Se déconnecter</button>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
