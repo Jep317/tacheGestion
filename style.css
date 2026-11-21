@@ -177,3 +177,14 @@ body.bureau .connexion { margin-right: 48px; }
     -webkit-app-region: drag; app-region: drag;
   }
 }
+
+/* Bouton « masquer » du panneau Windows, en haut à droite */
+.btn-masquer {
+  position: fixed; top: 6px; right: 6px; z-index: 30;
+  width: 28px; height: 28px; border-radius: 50%; padding: 0; line-height: 1;
+  border: 1px solid var(--ligne); background: var(--carte); color: var(--discret); font-size: 14px;
+  -webkit-app-region: no-drag; app-region: no-drag;
+}
+.btn-masquer:hover { color: var(--texte); border-color: var(--discret); }
+body.panneau .entete { padding-right: 44px; }
+body.panneau .connexion { padding-right: 44px; }

@@ -29,7 +29,9 @@ app.setAppUserModelId('com.jep317.taches');
 // Supabase rejette alors la connexion (« Database error granting user ») : on garde un User-Agent en ASCII pur.
 app.userAgentFallback = app.userAgentFallback
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  .replace(/[^\x20-\x7e]/g, '');
+  .replace(/[^\x20-\x7e]/g, '') +
+  // Marqueur lu par le site : il n'affiche le bouton « masquer » que dans un panneau qui sait le traiter.
+  ' TachesPanneau/1';
 const premiereInstance = app.requestSingleInstanceLock();
 if (!premiereInstance) app.quit();
 
@@ -95,7 +97,8 @@ function creerFenetre({ visible }) {
 
   // Liens externes : dans le navigateur habituel, pas dans le panneau.
   fenetre.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/.test(url)) shell.openExternal(url);
+    if (url === 'taches://masquer') fenetre.hide(); // bouton « masquer » du site
+    else if (/^https?:/.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
   fenetre.webContents.on('will-navigate', (e, url) => {

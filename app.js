@@ -456,4 +456,18 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catc
 // En fond d'écran, la page reste ouverte des jours : on rafraîchit la date et la liste de temps en temps.
 if (BUREAU) setInterval(() => { charger(); }, 15 * 60 * 1000);
 
+// Panneau Windows (appli « MesTaches », version 1.1.2 et suivantes) : un bouton pour masquer le panneau.
+// Le panneau intercepte l'ouverture de « taches://masquer » ; Ctrl+Alt+T le rappelle.
+if (/TachesPanneau\//.test(navigator.userAgent)) {
+  const masquer = document.createElement('button');
+  masquer.className = 'btn-masquer';
+  masquer.type = 'button';
+  masquer.title = 'Masquer (Ctrl+Alt+T pour revenir)';
+  masquer.setAttribute('aria-label', 'Masquer le panneau');
+  masquer.textContent = '—';
+  masquer.addEventListener('click', () => window.open('taches://masquer'));
+  document.body.append(masquer);
+  document.body.classList.add('panneau');
+}
+
 demarrer();
