@@ -47,9 +47,9 @@
       "releaseType": "release"
     },
     "appx": {
-      "identityName": "A_REMPLIR.Taches",
-      "publisher": "CN=A_REMPLIR",
-      "publisherDisplayName": "A_REMPLIR",
+      "identityName": "ARemplir.Taches",
+      "publisher": "CN=00000000-0000-0000-0000-000000000000",
+      "publisherDisplayName": "A remplir",
       "displayName": "Tâches",
       "applicationId": "Taches",
       "backgroundColor": "#2f6f5e",
