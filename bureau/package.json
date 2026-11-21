@@ -47,10 +47,10 @@
       "releaseType": "release"
     },
     "appx": {
-      "identityName": "ARemplir.Taches",
-      "publisher": "CN=00000000-0000-0000-0000-000000000000",
-      "publisherDisplayName": "A remplir",
-      "displayName": "Tâches",
+      "identityName": "Jep31.MesTaches",
+      "publisher": "CN=90033335-D602-464A-88E6-FCFD32B92571",
+      "publisherDisplayName": "Jep31",
+      "displayName": "Mes Tâches",
       "applicationId": "Taches",
       "backgroundColor": "#2f6f5e",
       "languages": [
