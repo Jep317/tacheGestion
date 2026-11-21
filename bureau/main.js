@@ -24,6 +24,12 @@ const CSS_PANNEAU = `
 `;
 
 app.setAppUserModelId('com.jep317.taches');
+
+// Electron met le nom de l'appli (« Tâches ») dans l'en-tête User-Agent, et l'envoie en Latin-1.
+// Supabase rejette alors la connexion (« Database error granting user ») : on garde un User-Agent en ASCII pur.
+app.userAgentFallback = app.userAgentFallback
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^\x20-\x7e]/g, '');
 const premiereInstance = app.requestSingleInstanceLock();
 if (!premiereInstance) app.quit();
 
