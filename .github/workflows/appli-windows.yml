@@ -56,11 +56,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Taches-Store
-          path: bureau/dist/Taches-Store.appx
+          path: bureau/dist/Taches-Store-*.appx
       # Le paquet Store est aussi joint à la version publiée, pour le télécharger sans passer par GitHub Actions.
       - name: Joindre le paquet Store à la version
         if: github.event_name != 'pull_request'
         shell: bash
-        run: gh release upload "v$(node -p "require('./package.json').version")" dist/Taches-Store.appx --clobber
+        run: gh release upload "v$(node -p "require('./package.json').version")" dist/Taches-Store-*.appx --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

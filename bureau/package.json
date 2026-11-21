@@ -57,7 +57,7 @@
         "fr-FR"
       ],
       "addAutoLaunchExtension": true,
-      "artifactName": "Taches-Store.${ext}"
+      "artifactName": "Taches-Store-${version}.${ext}"
     }
   }
 }
