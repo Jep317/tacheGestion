@@ -49,3 +49,10 @@ jobs:
         with:
           name: Taches-Installation
           path: bureau/dist/Taches-Installation.exe
+      # Paquet pour le Microsoft Store (signé par Microsoft au dépôt). Récupérable dans les artefacts de l'action.
+      - name: Construire le paquet Microsoft Store
+        run: npx electron-builder --win appx --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Taches-Store
+          path: bureau/dist/Taches-Store.appx
