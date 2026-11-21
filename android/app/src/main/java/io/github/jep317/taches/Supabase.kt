@@ -24,7 +24,7 @@ object Supabase {
         val titre: String?,
         val details: String?,
         val type: String,
-        val espace: String,
+        val categorie: String?,
         val horizon: String?,
         val etat: String,
         val theme: String?,
@@ -135,7 +135,7 @@ object Supabase {
 
     // ---------- données ----------
     fun lireListe(ctx: Context): List<Item> {
-        val chemin = "/rest/v1/items?select=id,texte_brut,titre,details,type,espace,horizon,etat,theme,projet,echeance" +
+        val chemin = "/rest/v1/items?select=id,texte_brut,titre,details,type,categorie:categories(nom),horizon,etat,theme,projet,echeance" +
             "&etat=in.(a_trier,a_faire,en_cours)&order=ordre.asc.nullslast,cree_le.asc"
         val texte = requete("GET", chemin, null, jeton(ctx))
         Cache.ecrire(ctx, texte)
@@ -153,7 +153,7 @@ object Supabase {
                 titre = o.chaine("titre"),
                 details = o.chaine("details"),
                 type = o.optString("type", "tache"),
-                espace = o.optString("espace", "perso"),
+                categorie = o.optJSONObject("categorie")?.chaine("nom"),
                 horizon = o.chaine("horizon"),
                 etat = o.optString("etat", "a_trier"),
                 theme = o.chaine("theme"),

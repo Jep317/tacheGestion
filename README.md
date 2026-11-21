@@ -9,7 +9,7 @@ Web app installable (PWA), sans étape de compilation : HTML, CSS et JavaScript 
 
 - **Liste** : les éléments à trier, puis Maintenant, Bientôt, Plus tard, Un jour, dans l'ordre fixé par Claude.
 - **Notes** : notes et idées, avec recherche.
-- **Perso / Famille** : filtre en haut à droite.
+- **Catégories** : filtres en haut ; ⚙ pour en ajouter, renommer, réordonner ou supprimer (aussi depuis l'appli Android, « Gérer mes catégories »). Claude range chaque élément dans l'une d'elles.
 - **Ajout** : champ en bas, ou dictée avec le micro. Tout arrive « à trier », Claude le range ensuite.
 - **Cocher** une tâche la passe en « fait » (annulable quelques secondes). Toucher une tâche affiche le détail.
 - **Raccourcis Android** (appui long sur l'icône) : « Ajouter » et « Dicter ».

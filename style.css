@@ -6,8 +6,7 @@
   --ligne: #e2dbcf;
   --accent: #2f6f5e;
   --accent-texte: #ffffff;
-  --famille: #b5651d;
-  --perso: #3d6fa8;
+  --c0: #3d6fa8; --c1: #b5651d; --c2: #2f7d4f; --c3: #8a4fa8; --c4: #b23a6a; --c5: #7a6a1d; --c6: #1d7a7a; --c7: #a8503d;
   --alerte: #b23a3a;
   --rayon: 12px;
   color-scheme: light;
@@ -21,8 +20,7 @@
     --ligne: #2f3834;
     --accent: #5fb39a;
     --accent-texte: #0f1513;
-    --famille: #e0a060;
-    --perso: #8ab4e8;
+    --c0: #8ab4e8; --c1: #e0a060; --c2: #7fcf9a; --c3: #c79be0; --c4: #e88fb2; --c5: #d8c870; --c6: #7fd0d0; --c7: #e8a08a;
     --alerte: #e07a7a;
     color-scheme: dark;
   }
@@ -63,6 +61,9 @@ input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 
 }
 .onglets, .espaces { display: flex; gap: 4px; background: var(--carte); border: 1px solid var(--ligne); border-radius: 999px; padding: 3px; }
 .onglets button, .espaces button { border: 0; background: none; border-radius: 999px; padding: 6px 12px; font-size: 14px; }
+#filtres { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+#filtres button { white-space: nowrap; flex: none; }
+#filtres .regler { color: var(--discret); padding: 6px 10px; }
 .onglets button[aria-selected="true"], .espaces button[aria-pressed="true"] { background: var(--accent); color: var(--accent-texte); font-weight: 600; }
 
 #contenu { max-width: 720px; margin: 0 auto; padding: 8px 16px; }
@@ -96,11 +97,28 @@ input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 
 .item.brut .titre { font-style: italic; }
 .item .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; font-size: 12px; color: var(--discret); }
 .tag { border: 1px solid var(--ligne); border-radius: 999px; padding: 0 7px; }
-.tag.famille { color: var(--famille); border-color: currentColor; }
-.tag.perso { color: var(--perso); border-color: currentColor; }
+.tag.cat { border-color: currentColor; }
+.c0 { color: var(--c0); } .c1 { color: var(--c1); } .c2 { color: var(--c2); } .c3 { color: var(--c3); }
+.c4 { color: var(--c4); } .c5 { color: var(--c5); } .c6 { color: var(--c6); } .c7 { color: var(--c7); }
+.choix-cat { display: inline-flex; gap: 8px; align-items: center; }
+select { font: inherit; font-size: 14px; color: var(--texte); background: var(--carte); border: 1px solid var(--ligne); border-radius: 8px; padding: 4px 6px; }
 .tag.echeance { color: var(--alerte); border-color: currentColor; }
 .item .details { grid-column: 2; font-size: 14px; color: var(--discret); white-space: pre-wrap; overflow-wrap: anywhere; }
 .item .details p { margin: 4px 0; }
+
+/* Fenêtre Catégories */
+.voile { position: fixed; inset: 0; z-index: 30; background: rgba(0, 0, 0, .4); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.fenetre { background: var(--fond); border: 1px solid var(--ligne); border-radius: 16px; padding: 18px; width: 100%; max-width: 420px; max-height: 90vh; overflow-y: auto; }
+.fenetre h2 { margin: 0 0 4px; font-size: 20px; }
+.petit { font-size: 13px; }
+.categories { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 6px; }
+.categories li { display: flex; gap: 8px; align-items: center; }
+.categories input { padding: 7px 10px; }
+.pastille { flex: none; width: 12px; height: 12px; border-radius: 50%; background: currentColor; }
+.rond.petit { width: 34px; height: 34px; font-size: 14px; }
+.rond:disabled { opacity: .35; cursor: default; }
+.ligne-ajout { display: flex; gap: 8px; }
+.fenetre .fin { text-align: right; margin: 14px 0 0; }
 
 /* Notes */
 #recherche { margin: 8px 0 4px; }
@@ -133,7 +151,7 @@ body.bureau {
   background: radial-gradient(ellipse at 20% 30%, #24403a 0%, #141a18 60%, #0e1211 100%) fixed;
   color: #e8ece9;
   --carte: rgba(255, 255, 255, .08); --ligne: rgba(255, 255, 255, .12); --texte: #e8ece9; --discret: #a7b3ae;
-  --accent: #5fb39a; --accent-texte: #0f1513; --famille: #e0a060; --perso: #8ab4e8; --alerte: #e88;
+  --accent: #5fb39a; --accent-texte: #0f1513; --c0: #8ab4e8; --c1: #e0a060; --c2: #7fcf9a; --c3: #c79be0; --c4: #e88fb2; --c5: #d8c870; --c6: #7fd0d0; --c7: #e8a08a; --alerte: #e88;
 }
 body.bureau .entete, body.bureau .ajout, body.bureau .pied, body.bureau #vue-notes { display: none !important; }
 body.bureau #contenu { max-width: 440px; margin: 0 48px 0 auto; padding: 40px 0; }
