@@ -141,3 +141,21 @@ body.bureau .date-bureau { font-size: 28px; font-weight: 300; margin-bottom: 8px
 body.bureau .date-bureau::first-letter { text-transform: uppercase; }
 body.bureau .item { backdrop-filter: blur(6px); }
 body.bureau .connexion { margin-right: 48px; }
+
+/* Appli installée (Edge, Chrome) sans barre de titre : on peut la poser en panneau étroit à droite de l'écran.
+   La bande du haut, à côté des boutons de fenêtre, sert à la déplacer. */
+@media (display-mode: window-controls-overlay) {
+  .entete { padding-top: calc(env(titlebar-area-height, 32px) + 6px); }
+  .entete::before {
+    content: "Tâches"; position: absolute; top: 0;
+    left: env(titlebar-area-x, 0); width: env(titlebar-area-width, 100%); height: env(titlebar-area-height, 32px);
+    display: flex; align-items: center; padding-left: 12px; box-sizing: border-box;
+    font-size: 13px; color: var(--discret); -webkit-app-region: drag; app-region: drag;
+  }
+  .connexion { margin-top: calc(env(titlebar-area-height, 32px) + 8vh); }
+  body::before {
+    content: ""; position: fixed; top: 0; left: env(titlebar-area-x, 0); z-index: 1;
+    width: env(titlebar-area-width, 100%); height: env(titlebar-area-height, 32px);
+    -webkit-app-region: drag; app-region: drag;
+  }
+}
