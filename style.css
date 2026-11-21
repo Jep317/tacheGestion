@@ -126,3 +126,18 @@ input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 
   display: flex; gap: 12px; align-items: center; max-width: calc(100% - 32px);
 }
 .toast button { background: none; border: 0; color: inherit; font-weight: 700; text-decoration: underline; padding: 0; }
+
+/* Mode bureau (?bureau=1) : fond d'écran avec la liste en colonne à droite */
+body.bureau {
+  padding: 0; min-height: 100vh;
+  background: radial-gradient(ellipse at 20% 30%, #24403a 0%, #141a18 60%, #0e1211 100%) fixed;
+  color: #e8ece9;
+  --carte: rgba(255, 255, 255, .08); --ligne: rgba(255, 255, 255, .12); --texte: #e8ece9; --discret: #a7b3ae;
+  --accent: #5fb39a; --accent-texte: #0f1513; --famille: #e0a060; --perso: #8ab4e8; --alerte: #e88;
+}
+body.bureau .entete, body.bureau .ajout, body.bureau .pied, body.bureau #vue-notes { display: none !important; }
+body.bureau #contenu { max-width: 440px; margin: 0 48px 0 auto; padding: 40px 0; }
+body.bureau .date-bureau { font-size: 28px; font-weight: 300; margin-bottom: 8px; }
+body.bureau .date-bureau::first-letter { text-transform: uppercase; }
+body.bureau .item { backdrop-filter: blur(6px); }
+body.bureau .connexion { margin-right: 48px; }
