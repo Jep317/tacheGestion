@@ -146,6 +146,10 @@ function ajoutRapide() {
 }
 
 // ---------- icône près de l'horloge ----------
+// Version Microsoft Store (MSIX) : le Store gère les mises à jour, et le démarrage avec Windows
+// passe par le paquet (réglable dans Paramètres > Applications > Démarrage).
+const VERSION_STORE = !!process.windowsStore;
+
 function demarreAvecWindows() { return app.getLoginItemSettings().openAtLogin; }
 function reglerDemarrage(oui) {
   app.setLoginItemSettings({ openAtLogin: oui, args: ['--au-demarrage'] });
@@ -161,10 +165,10 @@ function construireMenu() {
       label: 'Toujours au premier plan', type: 'checkbox', checked: !!reglages.premierPlan,
       click: (item) => { enregistrer({ premierPlan: item.checked }); fenetre.setAlwaysOnTop(item.checked); },
     },
-    {
+    ...(VERSION_STORE ? [] : [{
       label: 'Lancer au démarrage de Windows', type: 'checkbox', checked: demarreAvecWindows(),
       click: (item) => reglerDemarrage(item.checked),
-    },
+    }]),
     { label: 'Remettre le panneau à droite', click: () => { fenetre.setBounds(cadreParDefaut()); montrer(); } },
     { type: 'separator' },
     { label: 'Quitter', click: () => { quitter = true; app.quit(); } },
@@ -213,7 +217,7 @@ autoUpdater.on('update-downloaded', (info) => {
 autoUpdater.on('error', (err) => journal('erreur', err && (err.stack || err.message)));
 
 function verifierMisesAJour() {
-  if (!app.isPackaged) return;
+  if (!app.isPackaged || VERSION_STORE) return;
   journal('info', 'version', app.getVersion(), ': recherche de mise à jour');
   autoUpdater.checkForUpdates().catch((err) => journal('erreur', err && err.message));
 }
@@ -228,7 +232,7 @@ app.whenReady().then(() => {
   const premiereFois = !reglages.dejaLance;
 
   if (premiereFois) {
-    reglerDemarrage(true); // démarrage avec Windows activé d'office, désactivable dans le menu
+    if (!VERSION_STORE) reglerDemarrage(true); // démarrage avec Windows activé d'office, désactivable dans le menu
     enregistrer({ dejaLance: true });
   }
 
