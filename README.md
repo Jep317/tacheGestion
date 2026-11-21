@@ -19,7 +19,24 @@ Chaque action de l'appli est inscrite dans la table `journal` avec `par = 'appli
 ## Installer
 
 - **Android (Chrome)** : ouvrir l'adresse de l'appli, menu ⋮, « Ajouter à l'écran d'accueil » / « Installer l'application ».
-- **Windows (Chrome ou Edge)** : ouvrir l'adresse, icône d'installation dans la barre d'adresse.
+- **Windows, panneau sur le bureau** (conseillé) : télécharger et lancer
+  [Taches-Installation.exe](https://github.com/Jep317/tacheGestion/releases/latest/download/Taches-Installation.exe).
+  Windows peut afficher « Windows a protégé votre ordinateur » (l'appli n'est pas signée) :
+  « Informations complémentaires », puis « Exécuter quand même ». Voir plus bas.
+- **Windows (Chrome ou Edge)**, sinon : ouvrir l'adresse, icône d'installation dans la barre d'adresse.
+
+## Panneau Windows (`bureau/`)
+
+Petite appli Windows (Electron) qui affiche cette même appli web dans un panneau à droite de l'écran.
+Rien à recompiler quand l'appli web change : le panneau charge toujours la version en ligne.
+
+- **Ctrl+Alt+T** : afficher / masquer le panneau. **Ctrl+Alt+N** : ouvrir directement le champ d'ajout. **Échap** : masquer.
+- Se lance avec Windows (désactivable). Icône près de l'horloge : clic pour afficher, clic droit pour les options
+  (toujours au premier plan, démarrage avec Windows, remettre à droite, quitter).
+- On déplace le panneau par son en-tête et on le redimensionne par ses bords ; position et taille sont retenues.
+- Dictée : le micro de l'appli web ne marche pas dans le panneau ; **Windows+H** dicte dans le champ d'ajout.
+- Mises à jour du panneau automatiques. Pour en publier une : augmenter `version` dans `bureau/package.json` ;
+  l'action GitHub « Appli Windows » construit l'installateur et le met dans les Releases.
 
 ## Connexion et sécurité
 
@@ -37,6 +54,7 @@ Chaque action de l'appli est inscrite dans la table `journal` avec `par = 'appli
 | `manifest.webmanifest`, `sw.js`, `icons/` | installation comme appli (PWA) |
 | `vendor/supabase-js-2.45.4.js` | bibliothèque Supabase, embarquée pour ne dépendre d'aucun CDN |
 | `supabase/` | schéma de la base et règles de tri suivies par Claude |
+| `bureau/` | panneau Windows (Electron), construit par `.github/workflows/appli-windows.yml` |
 
 ## Essayer en local
 
