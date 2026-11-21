@@ -29,20 +29,20 @@ jobs:
           cache: npm
           cache-dependency-path: bureau/package-lock.json
       - run: npm ci
-      - name: Construire (essai)
-        if: github.event_name == 'pull_request'
+      - name: Construire
         run: npx electron-builder --win --publish never
-      - name: Construire et publier
-        if: github.event_name != 'pull_request'
-        run: npx electron-builder --win --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # electron-builder dépose les fichiers dans un brouillon ; on le publie une fois tout envoyé
-      # (le publier d'emblée fait échouer l'envoi des fichiers en parallèle).
-      - name: Rendre la version disponible
+      - name: Vérifier les fichiers
+        shell: bash
+        run: ls -l dist/Taches-Installation.exe dist/Taches-Installation.exe.blockmap dist/latest.yml && cat dist/latest.yml
+      # Publication en une seule fois avec gh : electron-builder lançait deux envois en parallèle
+      # qui créaient chacun leur propre version, d'où des versions incomplètes.
+      - name: Publier la version
         if: github.event_name != 'pull_request'
         shell: bash
-        run: gh release edit "v$(node -p "require('./package.json').version")" --draft=false --latest
+        run: |
+          V="v$(node -p "require('./package.json').version")"
+          gh release create "$V" dist/Taches-Installation.exe dist/Taches-Installation.exe.blockmap dist/latest.yml \
+            --title "Tâches pour Windows $V" --notes "Installateur du panneau Tâches." --latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/upload-artifact@v4
