@@ -58,6 +58,13 @@
             android:text="Ouvrir l'appli complète" />
 
         <Button
+            android:id="@+id/btn_categories"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Gérer mes catégories" />
+
+        <Button
             android:id="@+id/btn_deconnexion"
             style="?android:attr/borderlessButtonStyle"
             android:layout_width="wrap_content"

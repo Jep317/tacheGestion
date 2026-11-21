@@ -23,7 +23,8 @@ if (BUREAU) document.body.classList.add('bureau');
 const etat = {
   items: [],
   vue: 'liste',
-  espace: lire('espace') || 'tout',
+  categories: [],            // catégories choisies par Jérémie (table categories)
+  filtre: lire('filtre') || 'tout', // 'tout', 'aucune' ou l'id d'une catégorie
   recherche: '',
   ouverts: new Set(),        // éléments dont on affiche le détail
   sections: BUREAU ? {} : JSON.parse(lire('sections') || '{}'),
@@ -69,6 +70,7 @@ function afficherSelonSession(session) {
     charger();
     abonnement = sb.channel('items')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'items' }, charger)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, charger)
       .subscribe();
     actionsDeLancement();
   } else if (!connecte && abonnement) {
@@ -108,15 +110,22 @@ function traduireErreur(err) {
 
 // ---------- données ----------
 async function charger() {
-  const { data, error } = await sb
-    .from('items')
-    .select('id, texte_brut, titre, details, type, espace, horizon, etat, theme, projet, ordre, echeance, cree_le')
-    .in('etat', ['a_trier', 'a_faire', 'en_cours'])
-    .order('ordre', { ascending: true, nullsFirst: false })
-    .order('cree_le', { ascending: true });
+  const [items, cats] = await Promise.all([
+    sb.from('items')
+      .select('id, texte_brut, titre, details, type, categorie_id, horizon, etat, theme, projet, ordre, echeance, cree_le')
+      .in('etat', ['a_trier', 'a_faire', 'en_cours'])
+      .order('ordre', { ascending: true, nullsFirst: false })
+      .order('cree_le', { ascending: true }),
+    sb.from('categories').select('id, nom, ordre').order('ordre').order('nom'),
+  ]);
+  const error = items.error || cats.error;
   if (error) { toast('Impossible de charger la liste : ' + error.message); return; }
-  etat.items = data;
+  etat.items = items.data;
+  etat.categories = cats.data;
+  if (etat.filtre !== 'tout' && etat.filtre !== 'aucune' && !categorie(etat.filtre)) etat.filtre = 'tout';
+  afficherFiltres();
   afficher();
+  if (!$('#dlg-categories').hidden) afficherGestion();
 }
 
 async function ajouter(texte, source) {
@@ -141,14 +150,116 @@ async function changerEtat(item, nouvelEtat) {
   charger();
 }
 
+async function changerCategorie(item, categorieId) {
+  const avant = { categorie_id: item.categorie_id };
+  const apres = { categorie_id: categorieId || null };
+  const { error } = await sb.from('items').update(apres).eq('id', item.id);
+  if (error) { toast('Modification impossible : ' + error.message); return; }
+  await sb.from('journal').insert({ item_id: item.id, action: 'modifie', avant, apres, par: 'appli' });
+  charger();
+}
+
+// ---------- catégories ----------
+const COULEURS = 8; // teintes définies dans style.css (--c0 … --c7)
+function categorie(id) { return etat.categories.find((c) => c.id === id); }
+function couleur(id) { return Math.max(0, etat.categories.findIndex((c) => c.id === id)) % COULEURS; }
+
+function afficherFiltres() {
+  const boutons = [['tout', 'Tout'], ...etat.categories.map((c) => [c.id, c.nom])];
+  if (etat.items.some((i) => i.etat !== 'a_trier' && !i.categorie_id)) boutons.push(['aucune', 'Sans catégorie']);
+  $('#filtres').innerHTML = boutons
+    .map(([id, nom]) => `<button data-filtre="${id}" aria-pressed="${etat.filtre === id}">${echap(nom)}</button>`)
+    .join('') + '<button class="regler" data-gerer aria-label="Gérer les catégories" title="Gérer les catégories">⚙</button>';
+}
+
+function choisirFiltre(f) {
+  etat.filtre = f;
+  ecrire('filtre', f);
+  afficherFiltres();
+  afficher();
+}
+
+function afficherGestion() {
+  const cats = etat.categories;
+  const compte = (id) => etat.items.filter((i) => i.categorie_id === id).length;
+  $('#liste-categories').innerHTML = cats.length ? cats.map((c, n) => `
+    <li data-cat="${c.id}">
+      <span class="pastille c${couleur(c.id)}"></span>
+      <input value="${echap(c.nom)}" maxlength="40" aria-label="Nom de la catégorie" data-renommer="${c.id}">
+      <span class="discret petit" title="Éléments en cours">${compte(c.id) || ''}</span>
+      <button class="rond petit" data-monter="${c.id}" ${n === 0 ? 'disabled' : ''} aria-label="Monter" title="Monter">↑</button>
+      <button class="rond petit" data-supprimer="${c.id}" aria-label="Supprimer" title="Supprimer">✕</button>
+    </li>`).join('') : '<li class="discret">Aucune catégorie pour l\'instant.</li>';
+}
+
+function ouvrirGestion() {
+  afficherGestion();
+  $('#dlg-categories').hidden = false;
+}
+function fermerGestion() { $('#dlg-categories').hidden = true; }
+
+async function ajouterCategorie(nom) {
+  nom = nom.trim();
+  if (!nom) return false;
+  if (etat.categories.some((c) => c.nom.toLowerCase() === nom.toLowerCase())) { toast('Cette catégorie existe déjà.'); return false; }
+  const ordre = Math.max(0, ...etat.categories.map((c) => c.ordre)) + 1;
+  const { error } = await sb.from('categories').insert({ nom, ordre });
+  if (error) { toast('Ajout impossible : ' + error.message); return false; }
+  await sb.from('journal').insert({ action: 'categorie_creee', apres: { nom }, par: 'appli' });
+  await charger();
+  return true;
+}
+
+async function renommerCategorie(id, nom) {
+  const c = categorie(id);
+  nom = nom.trim();
+  if (!c || !nom || nom === c.nom) { afficherGestion(); return; }
+  const { error } = await sb.from('categories').update({ nom }).eq('id', id);
+  if (error) { toast(/duplicate|unique/i.test(error.message) ? 'Ce nom est déjà pris.' : 'Renommage impossible : ' + error.message); afficherGestion(); return; }
+  await sb.from('journal').insert({ action: 'categorie_renommee', avant: { nom: c.nom }, apres: { nom }, par: 'appli' });
+  toast('Renommée en « ' + nom + ' ».');
+  charger();
+}
+
+async function monterCategorie(id) {
+  const cats = [...etat.categories];
+  const n = cats.findIndex((c) => c.id === id);
+  if (n <= 0) return;
+  [cats[n - 1], cats[n]] = [cats[n], cats[n - 1]];
+  const res = await Promise.all(cats.map((c, k) => (c.ordre === k + 1 ? null : sb.from('categories').update({ ordre: k + 1 }).eq('id', c.id))));
+  const err = res.find((r) => r && r.error);
+  if (err) toast('Modification impossible : ' + err.error.message);
+  charger();
+}
+
+async function supprimerCategorie(id) {
+  const c = categorie(id);
+  if (!c) return;
+  const n = etat.items.filter((i) => i.categorie_id === id).length;
+  const msg = n
+    ? `Supprimer « ${c.nom} » ? Ses ${n} élément(s) restent dans ta liste, sans catégorie : Claude les reclassera.`
+    : `Supprimer « ${c.nom} » ?`;
+  if (!confirm(msg)) return;
+  const { error } = await sb.from('categories').delete().eq('id', id);
+  if (error) { toast('Suppression impossible : ' + error.message); return; }
+  await sb.from('journal').insert({ action: 'categorie_supprimee', avant: { nom: c.nom, elements: n }, par: 'appli' });
+  toast('« ' + c.nom + ' » supprimée.');
+  charger();
+}
+
 // ---------- affichage ----------
-function filtreEspace(i) { return etat.espace === 'tout' || i.espace === etat.espace; }
+function filtreCategorie(i) {
+  if (etat.filtre === 'tout') return true;
+  if (etat.filtre === 'aucune') return i.etat !== 'a_trier' && !i.categorie_id;
+  return i.categorie_id === etat.filtre;
+}
 
 function carte(i, { cocher = true } = {}) {
   const brut = !i.titre;
   const ouvert = etat.ouverts.has(i.id);
   const tags = [];
-  if (etat.espace === 'tout' && i.etat !== 'a_trier') tags.push(`<span class="tag ${i.espace}">${i.espace === 'famille' ? 'Famille' : 'Perso'}</span>`);
+  const cat = categorie(i.categorie_id);
+  if (etat.filtre === 'tout' && cat) tags.push(`<span class="tag cat c${couleur(cat.id)}">${echap(cat.nom)}</span>`);
   if (i.type === 'course') tags.push('<span class="tag">Course</span>');
   if (i.type === 'idee') tags.push('<span class="tag">Idée</span>');
   if (i.etat === 'en_cours') tags.push('<span class="tag">En cours</span>');
@@ -162,6 +273,11 @@ function carte(i, { cocher = true } = {}) {
     if (i.details) morceaux.push(`<p>${echap(i.details)}</p>`);
     if (!brut) morceaux.push(`<p>« ${echap(i.texte_brut)} »</p>`);
     if (cocher && i.etat !== 'en_cours') morceaux.push(`<p><button class="lien" data-action="en_cours" data-id="${i.id}">Marquer en cours</button></p>`);
+    if (etat.categories.length) {
+      const options = [`<option value="">${i.etat === 'a_trier' ? 'Laisser Claude choisir' : 'Sans catégorie'}</option>`]
+        .concat(etat.categories.map((c) => `<option value="${c.id}" ${c.id === i.categorie_id ? 'selected' : ''}>${echap(c.nom)}</option>`));
+      morceaux.push(`<p><label class="choix-cat">Catégorie <select data-categorie-de="${i.id}">${options.join('')}</select></label></p>`);
+    }
     detail = `<div class="details">${morceaux.join('') || '<p>Rien de plus.</p>'}</div>`;
   }
 
@@ -185,7 +301,7 @@ function section(cle, nom, items, ouvertParDefaut, classe = '') {
 
 function afficher() {
   // Liste par horizon
-  const liste = etat.items.filter((i) => filtreEspace(i));
+  const liste = etat.items.filter((i) => filtreCategorie(i));
   const aTrier = liste.filter((i) => i.etat === 'a_trier');
   let html = '';
   if (aTrier.length) html += section('a_trier', 'À trier', aTrier, true, 'a-trier');
@@ -242,14 +358,42 @@ document.querySelectorAll('[data-vue]').forEach((b) => b.addEventListener('click
   $('#vue-notes').hidden = etat.vue !== 'notes';
 }));
 
-function choisirEspace(esp) {
-  etat.espace = esp;
-  ecrire('espace', esp);
-  document.querySelectorAll('[data-espace]').forEach((x) => x.setAttribute('aria-pressed', x.dataset.espace === esp));
-  afficher();
-}
-document.querySelectorAll('[data-espace]').forEach((b) => b.addEventListener('click', () => choisirEspace(b.dataset.espace)));
-choisirEspace(etat.espace);
+$('#filtres').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.hasAttribute('data-gerer')) ouvrirGestion();
+  else choisirFiltre(b.dataset.filtre);
+});
+
+document.addEventListener('change', (e) => {
+  const s = e.target.closest('[data-categorie-de]');
+  if (!s) return;
+  const item = etat.items.find((i) => i.id === s.dataset.categorieDe);
+  if (item) changerCategorie(item, s.value);
+});
+
+// Fenêtre « Catégories »
+$('#form-categorie').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const champ = $('#nouvelle-categorie');
+  if (await ajouterCategorie(champ.value)) { champ.value = ''; champ.focus(); }
+});
+$('#liste-categories').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.monter) monterCategorie(b.dataset.monter);
+  if (b.dataset.supprimer) supprimerCategorie(b.dataset.supprimer);
+});
+$('#liste-categories').addEventListener('change', (e) => {
+  const c = e.target.closest('[data-renommer]');
+  if (c) renommerCategorie(c.dataset.renommer, c.value);
+});
+$('#liste-categories').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.matches('[data-renommer]')) e.target.blur();
+});
+$('#btn-fermer-categories').addEventListener('click', fermerGestion);
+$('#dlg-categories').addEventListener('click', (e) => { if (e.target.id === 'dlg-categories') fermerGestion(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#dlg-categories').hidden) fermerGestion(); });
 
 $('#recherche').addEventListener('input', (e) => { etat.recherche = e.target.value; afficher(); });
 
@@ -303,7 +447,8 @@ function actionsDeLancement() {
   const p = new URLSearchParams(location.search);
   if (p.has('ajout')) saisie.focus();
   if (p.has('vocal')) demarrerDictee();
-  if (p.has('ajout') || p.has('vocal')) history.replaceState(null, '', location.pathname + (BUREAU ? '?bureau=1' : ''));
+  if (p.has('categories')) ouvrirGestion();
+  if (p.has('ajout') || p.has('vocal') || p.has('categories')) history.replaceState(null, '', location.pathname + (BUREAU ? '?bureau=1' : ''));
 }
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
