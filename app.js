@@ -15,13 +15,18 @@ const HORIZONS = [
 const TYPES_LISTE = ['tache', 'course'];
 const TYPES_NOTES = ['note', 'idee'];
 
+// Mode « bureau » (?bureau=1) : la liste seule, en colonne à droite, pour servir de fond d'écran
+// (par ex. avec Lively Wallpaper). Pas d'ajout ni d'onglets ; les horizons lointains sont repliés.
+const BUREAU = new URLSearchParams(location.search).has('bureau');
+if (BUREAU) document.body.classList.add('bureau');
+
 const etat = {
   items: [],
   vue: 'liste',
   espace: lire('espace') || 'tout',
   recherche: '',
   ouverts: new Set(),        // éléments dont on affiche le détail
-  sections: JSON.parse(lire('sections') || '{}'),
+  sections: BUREAU ? {} : JSON.parse(lire('sections') || '{}'),
 };
 
 // ---------- utilitaires ----------
@@ -187,6 +192,10 @@ function afficher() {
   for (const h of HORIZONS) {
     html += section(h.cle, h.nom, liste.filter((i) => i.etat !== 'a_trier' && i.horizon === h.cle && TYPES_LISTE.includes(i.type)), h.ouvert);
   }
+  if (BUREAU) {
+    const maintenant = new Date();
+    html = `<div class="date-bureau">${maintenant.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</div>` + html;
+  }
   $('#vue-liste').innerHTML = html;
 
   // Notes et idées
@@ -222,7 +231,7 @@ document.addEventListener('toggle', (e) => {
   const d = e.target;
   if (d.matches?.('details[data-section]')) {
     etat.sections[d.dataset.section] = d.open;
-    ecrire('sections', JSON.stringify(etat.sections));
+    if (!BUREAU) ecrire('sections', JSON.stringify(etat.sections));
   }
 }, true);
 
@@ -294,9 +303,12 @@ function actionsDeLancement() {
   const p = new URLSearchParams(location.search);
   if (p.has('ajout')) saisie.focus();
   if (p.has('vocal')) demarrerDictee();
-  if (p.has('ajout') || p.has('vocal')) history.replaceState(null, '', location.pathname);
+  if (p.has('ajout') || p.has('vocal')) history.replaceState(null, '', location.pathname + (BUREAU ? '?bureau=1' : ''));
 }
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+// En fond d'écran, la page reste ouverte des jours : on rafraîchit la date et la liste de temps en temps.
+if (BUREAU) setInterval(() => { charger(); }, 15 * 60 * 1000);
 
 demarrer();
