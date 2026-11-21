@@ -18,7 +18,11 @@ Chaque action de l'appli est inscrite dans la table `journal` avec `par = 'appli
 
 ## Installer
 
-- **Android (Chrome)** : ouvrir l'adresse de l'appli, menu ⋮, « Ajouter à l'écran d'accueil » / « Installer l'application ».
+- **Android, widget sur l'écran d'accueil** : sur le téléphone, télécharger
+  [Taches-Android.apk](https://github.com/Jep317/tacheGestion/releases/download/android/Taches-Android.apk) et l'ouvrir.
+  Android demande d'autoriser l'installation depuis Chrome (« Paramètres », puis activer « Autoriser cette source »),
+  puis « Installer ». Play Protect peut prévenir que l'appli est inconnue : « Installer quand même ». Voir plus bas.
+- **Android (Chrome)**, l'appli complète : ouvrir l'adresse de l'appli, menu ⋮, « Ajouter à l'écran d'accueil » / « Installer l'application ».
 - **Windows, panneau sur le bureau** (conseillé) : télécharger et lancer
   [Taches-Installation.exe](https://github.com/Jep317/tacheGestion/releases/latest/download/Taches-Installation.exe).
   Windows peut afficher « Windows a protégé votre ordinateur » (l'appli n'est pas signée) :
@@ -38,6 +42,21 @@ Rien à recompiler quand l'appli web change : le panneau charge toujours la vers
 - Mises à jour du panneau automatiques. Pour en publier une : augmenter `version` dans `bureau/package.json` ;
   l'action GitHub « Appli Windows » construit l'installateur et le met dans les Releases.
 
+## Appli Android et widget (`android/`)
+
+Petite appli Android native (Kotlin, sans bibliothèque) qui pose un **widget** sur l'écran d'accueil :
+
+- La liste : À trier, Maintenant, Bientôt, puis le nombre d'éléments Plus tard / Un jour.
+- **+** : ajout rapide au clavier. **Micro** : dictée Google en français. Tout arrive « à trier » (`source` = `widget` ou `vocal`).
+- Toucher une tâche : son détail, avec « ✓ Fait » et « En cours ». « Tâches » en haut ouvre l'appli web complète.
+- Mise à jour toutes les 30 minutes, après chaque ajout ou changement, et avec ↻. Garde la dernière liste hors ligne.
+- Connexion une seule fois dans l'appli (même compte que l'appli web) ; le jeton est renouvelé tout seul.
+
+Construite par l'action GitHub « Appli Android » à chaque changement de `android/` sur main ; l'APK remplace celui de la
+version `android` (marquée « préversion » pour ne pas gêner les mises à jour du panneau Windows), adresse fixe ci-dessus.
+Installer le nouvel APK par-dessus l'ancien suffit : la clé de signature (`android/signature/`) est toujours la même.
+Elle est dans le dépôt public, ce qui est acceptable pour une appli personnelle installée à la main, pas pour le Play Store.
+
 ## Connexion et sécurité
 
 - Compte e-mail + mot de passe (Supabase Auth). Première fois : « Créer mon compte », puis cliquer le lien reçu par e-mail.
@@ -55,6 +74,7 @@ Rien à recompiler quand l'appli web change : le panneau charge toujours la vers
 | `vendor/supabase-js-2.45.4.js` | bibliothèque Supabase, embarquée pour ne dépendre d'aucun CDN |
 | `supabase/` | schéma de la base et règles de tri suivies par Claude |
 | `bureau/` | panneau Windows (Electron), construit par `.github/workflows/appli-windows.yml` |
+| `android/` | appli Android et widget, construits par `.github/workflows/appli-android.yml` |
 
 ## Essayer en local
 
