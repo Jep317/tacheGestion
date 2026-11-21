@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Tâches</title>
+<style>
+  :root { --fond: #f4efe6; --texte: #23302b; --discret: #6b7671; }
+  @media (prefers-color-scheme: dark) { :root { --fond: #161b19; --texte: #e8ece9; --discret: #98a39e; } }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--fond); color: var(--texte); font: 16px/1.45 "Segoe UI", system-ui, sans-serif;
+         display: grid; place-items: center; text-align: center; padding: 24px; box-sizing: border-box;
+         -webkit-app-region: drag; }
+  p { color: var(--discret); }
+</style>
+</head>
+<body>
+  <div>
+    <h2>Pas de connexion</h2>
+    <p>La liste revient dès qu'Internet est de retour.<br>Nouvel essai toutes les 30 secondes.</p>
+  </div>
+</body>
+</html>

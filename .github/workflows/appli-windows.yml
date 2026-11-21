@@ -1,0 +1,43 @@
+# Construit l'installateur Windows du panneau Tâches (dossier bureau/).
+# Sur une demande de fusion : construction d'essai, rien n'est publié.
+# Sur main : publication dans les « Releases » du dépôt ; les panneaux installés se mettent à jour tout seuls.
+# Pour publier une nouvelle version, augmenter "version" dans bureau/package.json.
+name: Appli Windows
+
+on:
+  push:
+    branches: [main]
+    paths: ['bureau/**', '.github/workflows/appli-windows.yml']
+  pull_request:
+    paths: ['bureau/**', '.github/workflows/appli-windows.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  construire:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: bureau
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: bureau/package-lock.json
+      - run: npm ci
+      - name: Construire (essai)
+        if: github.event_name == 'pull_request'
+        run: npx electron-builder --win --publish never
+      - name: Construire et publier
+        if: github.event_name != 'pull_request'
+        run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Taches-Installation
+          path: bureau/dist/Taches-Installation.exe

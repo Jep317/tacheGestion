@@ -1,0 +1,44 @@
+{
+  "name": "taches-bureau",
+  "productName": "Tâches",
+  "version": "1.0.0",
+  "description": "Panneau Tâches sur le bureau Windows",
+  "author": "Jep317",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "construire": "electron-builder --win --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.12"
+  },
+  "devDependencies": {
+    "electron": "45.2.3",
+    "electron-builder": "26.18.1"
+  },
+  "build": {
+    "appId": "com.jep317.taches",
+    "productName": "Tâches",
+    "files": ["main.js", "hors-ligne.html", "icone.png"],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png",
+      "artifactName": "Taches-Installation.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Tâches"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Jep317",
+      "repo": "tacheGestion",
+      "releaseType": "release"
+    }
+  }
+}
