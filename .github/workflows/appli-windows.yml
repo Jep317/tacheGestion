@@ -37,6 +37,14 @@ jobs:
         run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # electron-builder dépose les fichiers dans un brouillon ; on le publie une fois tout envoyé
+      # (le publier d'emblée fait échouer l'envoi des fichiers en parallèle).
+      - name: Rendre la version disponible
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: gh release edit "v$(node -p "require('./package.json').version")" --draft=false --latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/upload-artifact@v4
         with:
           name: Taches-Installation

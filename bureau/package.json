@@ -1,7 +1,7 @@
 {
   "name": "taches-bureau",
   "productName": "Tâches",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Panneau Tâches sur le bureau Windows",
   "author": "Jep317",
   "main": "main.js",
@@ -38,7 +38,7 @@
       "provider": "github",
       "owner": "Jep317",
       "repo": "tacheGestion",
-      "releaseType": "release"
+      "releaseType": "draft"
     }
   }
 }
