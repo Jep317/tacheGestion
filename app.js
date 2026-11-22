@@ -31,6 +31,8 @@ const etat = {
   propositions: [],
   questions: [],             // questions simples de Claude (« c'est dans quelle tâche ? »)          // revue de la semaine : propositions de Claude en attente de réponse
   ouverts: new Set(),        // éléments dont on affiche le détail
+  reglages: new Set(),       // fiches dont le panneau « Réglages » est déplié
+  ajouts: new Map(),         // fiche -> champ d'ajout affiché ('sous', 'check' ou 'note')
   sections: BUREAU ? {} : JSON.parse(lire('sections') || '{}'),
   liens: [],                 // tous les enfants (faits compris) : { id, parent_id, etat, type }, pour la progression « 2/5 »
   horsListe: new Map(),      // parents déjà faits, pour afficher « ↳ Garage » sous un enfant encore ouvert
@@ -502,7 +504,7 @@ async function promouvoirLigne(ligneId) {
 }
 
 /** HTML de la checklist d'un élément, avec ajout rapide (plusieurs lignes d'un coup). */
-function afficherChecklist(itemId) {
+function afficherChecklist(itemId, { formulaire = true } = {}) {
   const lignes = lignesChecklist(itemId);
   const promouvable = (() => { const i = etat.items.find((x) => x.id === itemId); return i && estTache(i) && profondeur(i) + 1 < NIVEAUX_MAX; })();
   return `<div class="bloc checklist">
@@ -512,13 +514,145 @@ function afficherChecklist(itemId) {
       ${promouvable ? `<button type="button" class="mini" data-check-promouvoir="${l.id}" title="En faire une sous-tâche (ou appui long sur la ligne)" aria-label="En faire une sous-tâche">⤴</button>` : ''}
       <button type="button" class="mini" data-check-suppr="${l.id}" title="Supprimer" aria-label="Supprimer">✕</button>
     </li>`).join('')}</ul>` : ''}
-    <form class="mini-ajout" data-ajout-check="${itemId}">
+    ${formulaire ? `<form class="mini-ajout" data-ajout-check="${itemId}">
       <input data-garder="check-${itemId}" placeholder="Ajouter des lignes (séparées par des virgules)" autocomplete="off" enterkeyhint="done">
       <button type="submit" class="mini" aria-label="Ajouter">＋</button>
-    </form>
+    </form>` : ''}
     ${lignes.some((l) => l.coche) ? `<button type="button" class="lien petit" data-check-vider="${itemId}">Retirer les lignes cochées</button>` : ''}
   </div>`;
 }
+
+
+// ---------- fiche d'un élément ouvert ----------
+// D'abord ce qu'on lit (description, infos, contenu), en grand et aéré ; les réglages sont repliés
+// derrière le bouton « ⚙ Réglages », et les champs d'ajout n'apparaissent qu'à la demande.
+function dateLongue(iso) {
+  const auj = aujourdhui();
+  const rel = iso === auj ? 'aujourd\'hui' : iso === ajouterJours(auj, 1) ? 'demain' : iso === ajouterJours(auj, -1) ? 'hier' : '';
+  const d = dateDe(iso).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  return rel ? `${rel[0].toUpperCase() + rel.slice(1)}, ${d}` : d[0].toUpperCase() + d.slice(1);
+}
+
+function infosDe(i, parent) {
+  const lignes = [];
+  const ligne = (icone, texte, classe = '') => lignes.push(`<li class="${classe}"><span class="icone" aria-hidden="true">${icone}</span><span>${texte}</span></li>`);
+  if (i.etat === 'en_cours') ligne('▶', 'En cours', 'fort');
+  if (i.echeance) {
+    const retard = i.echeance < aujourdhui();
+    ligne('📅', echap(dateLongue(i.echeance)) + (i.echeance_heure ? ' à ' + echap(heureCourte(i.echeance_heure)) : '') + (retard ? ' · <strong>en retard</strong>' : ''), retard ? 'alerte' : 'fort');
+  }
+  if (i.recurrence) ligne('🔁', echap(texteRecurrence(i.recurrence)[0].toUpperCase() + texteRecurrence(i.recurrence).slice(1)));
+  for (const r of rappelsDe(i.id)) ligne('🔔', 'Rappel ' + echap(dateHeure(r.quand)));
+  if (parent) ligne(estTache(i) ? '↳' : '📎', (estTache(i) ? 'Étape de ' : 'Attachée à ') + `<button type="button" class="lien-info" data-action="aller" data-id="${i.id}">${echap(libelle(parent))}</button>`);
+  const cat = categorie(i.categorie_id);
+  const morceaux = [];
+  if (cat) morceaux.push(`<span class="c${couleur(cat.id)}">● ${echap(cat.nom)}</span>`);
+  if (i.projet) morceaux.push(`${echap(i.projet)}`);
+  if (i.type === 'idee') morceaux.push('Idée');
+  if (i.type === 'course') morceaux.push('Course');
+  if (morceaux.length) ligne('🏷', morceaux.join(' · '), 'discret');
+  return lignes.length ? `<ul class="infos">${lignes.join('')}</ul>` : '';
+}
+
+function fiche(i, { niveau, cocher, cleOuvert, parent, notes, brut }) {
+  const parties = [];
+  if (i.details) parties.push(`<div class="description">${echap(i.details)}</div>`);
+  parties.push(infosDe(i, parent));
+  if (!brut && i.texte_brut && i.texte_brut !== i.titre && i.texte_brut !== i.details) {
+    parties.push(`<p class="dicte" title="Ce que tu as dicté ou écrit">« ${echap(i.texte_brut)} »</p>`);
+  }
+
+  // Contenu : checklist et notes attachées, seulement s'il y en a.
+  const tache = estTache(i) && i.etat !== 'a_trier';
+  const ajout = etat.ajouts.get(cleOuvert);
+  if (tache && (lignesChecklist(i.id).length || ajout === 'check')) parties.push(afficherChecklist(i.id, { formulaire: ajout === 'check' }));
+  if (tache && (notes.length || ajout === 'note')) {
+    parties.push(`<div class="bloc">
+      <div class="bloc-titre">Notes attachées${notes.length ? ` <span class="compte">${notes.length}</span>` : ''}</div>
+      ${notes.map((n) => `<div class="note-liee"><strong>${echap(libelle(n))}</strong>${n.details && n.details !== n.titre ? `<div>${echap(n.details)}</div>` : ''}</div>`).join('')}
+      ${ajout === 'note' ? `<form class="mini-ajout" data-ajout-note="${i.id}">
+        <textarea rows="1" data-garder="note-${i.id}" placeholder="Écris la note puis Entrée"></textarea>
+        <button type="submit" class="mini" aria-label="Attacher la note">＋</button></form>` : ''}
+    </div>`);
+  }
+  if (tache && ajout === 'sous') {
+    parties.push(`<form class="mini-ajout" data-ajout-sous="${i.id}">
+      <input data-garder="sous-${i.id}" placeholder="Nouvelle sous-tâche puis Entrée" autocomplete="off" enterkeyhint="done">
+      <button type="submit" class="mini" aria-label="Ajouter la sous-tâche">＋</button></form>`);
+  }
+
+  // Barre d'actions : ajouts discrets à gauche, réglages à droite.
+  const boutons = [];
+  if (tache) {
+    if (profondeur(i) + 1 < NIVEAUX_MAX) boutons.push(['sous', '＋ Sous-tâche']);
+    boutons.push(['check', '☑ Checklist'], ['note', '📎 Note']);
+  }
+  const reglagesOuverts = etat.reglages.has(cleOuvert);
+  parties.push(`<div class="barre-fiche">
+    ${cocher && i.etat === 'a_faire' ? `<button type="button" class="puce-action" data-action="en_cours" data-id="${i.id}">▶ En cours</button>` : ''}
+    ${boutons.map(([k, t]) => `<button type="button" class="puce-action" data-ajout-ouvrir="${k}" data-cle="${echap(cleOuvert)}" aria-pressed="${ajout === k}">${t}</button>`).join('')}
+    <button type="button" class="puce-action btn-reglages" data-reglages="${echap(cleOuvert)}" aria-expanded="${reglagesOuverts}">⚙ Réglages</button>
+  </div>`);
+
+  if (reglagesOuverts) {
+    const r = [];
+    if (i.etat !== 'a_trier') {
+      const possibles = parentsPossibles(i);
+      if (possibles.length || i.parent_id) {
+        const options = [`<option value="">${estTache(i) ? 'Aucune (tâche principale)' : 'Aucune'}</option>`]
+          .concat(possibles.map((p) => `<option value="${p.id}" ${p.id === i.parent_id ? 'selected' : ''}>${'  '.repeat(profondeur(p))}${echap(libelle(p))}</option>`));
+        if (i.parent_id && !possibles.some((p) => p.id === i.parent_id)) options.push(`<option value="${i.parent_id}" selected>${echap(libelle(parent))}</option>`);
+        r.push(`<label class="choix-cat"><span>${estTache(i) ? 'Sous-tâche de' : 'Attachée à'}</span> <select data-parent-de="${i.id}">${options.join('')}</select></label>`);
+      }
+    }
+    if (etat.categories.length && niveau === 0) {
+      const options = [`<option value="">${i.etat === 'a_trier' ? 'Laisser Claude choisir' : 'Sans catégorie'}</option>`]
+        .concat(etat.categories.map((c) => `<option value="${c.id}" ${c.id === i.categorie_id ? 'selected' : ''}>${echap(c.nom)}</option>`));
+      r.push(`<label class="choix-cat"><span>Catégorie</span> <select data-categorie-de="${i.id}">${options.join('')}</select></label>`);
+    }
+    if (niveau === 0 && i.etat !== 'a_trier') {
+      r.push(`<label class="choix-cat"><span>Projet</span> <input class="champ-projet" list="projets-connus" data-projet-de="${i.id}"
+        value="${echap(i.projet || '')}" maxlength="60" placeholder="${TYPES_NOTES.includes(i.type) ? 'Laisser Claude choisir' : 'Aucun'}" autocomplete="off" enterkeyhint="done"></label>`);
+    }
+    if (cocher) r.push(blocPlanif(i));
+    if (cocher && i.etat === 'en_cours') r.push(`<button type="button" class="lien petit" data-remettre-a-faire="${i.id}">Ce n'est plus en cours</button>`);
+    parties.push(`<div class="reglages">${r.join('') || '<p class="discret petit">Rien à régler ici.</p>'}</div>`);
+  }
+  return `<div class="details">${parties.join('')}</div>`;
+}
+
+document.addEventListener('click', (e) => {
+  const reg = e.target.closest('[data-reglages]');
+  if (reg) {
+    const cle = reg.dataset.reglages;
+    etat.reglages.has(cle) ? etat.reglages.delete(cle) : etat.reglages.add(cle);
+    afficher();
+    if (etat.reglages.has(cle)) document.querySelector(`[data-reglages="${CSS.escape(cle)}"]`)?.closest('.details')?.querySelector('.reglages')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    return;
+  }
+  const aj = e.target.closest('[data-ajout-ouvrir]');
+  if (aj) {
+    const { cle, ajoutOuvrir: k } = aj.dataset;
+    etat.ajouts.get(cle) === k ? etat.ajouts.delete(cle) : etat.ajouts.set(cle, k);
+    afficher();
+    const champ = document.querySelector(`[data-ajout-ouvrir][data-cle="${CSS.escape(cle)}"]`)?.closest('.details')
+      ?.querySelector('.mini-ajout input, .mini-ajout textarea');
+    if (etat.ajouts.get(cle)) champ?.focus();
+    return;
+  }
+  const rf = e.target.closest('[data-remettre-a-faire]');
+  if (rf) {
+    const item = etat.items.find((i) => i.id === rf.dataset.remettreAFaire);
+    if (item) changerEtat(item, 'a_faire');
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const f = e.target.closest?.('.mini-ajout');
+  if (!f) return;
+  const cle = f.closest('.details')?.querySelector('[data-ajout-ouvrir]')?.dataset.cle;
+  if (cle) { e.target.value = ''; etat.ajouts.delete(cle); afficher(); }
+});
 
 // ---------- catégories ----------
 const COULEURS = 8; // teintes définies dans style.css (--c0 … --c7)
@@ -695,54 +829,14 @@ function carte(i, { cocher = true, niveau = 0, contexte = false, raison = '', ar
   if (niveau === 0 && i.projet && !etat.projet && etat.vue !== 'notes') tags.push(`<span>· ${echap(i.projet)}</span>`);
 
   let detail = '';
-  if (ouvert) {
-    const morceaux = [];
-    if (i.details) morceaux.push(`<p>${echap(i.details)}</p>`);
-    if (!brut && i.texte_brut !== i.titre) morceaux.push(`<p>« ${echap(i.texte_brut)} »</p>`);
-    if (cocher && i.etat !== 'en_cours') morceaux.push(`<p><button class="lien" data-action="en_cours" data-id="${i.id}">Marquer en cours</button></p>`);
-    if (estTache(i) && i.etat !== 'a_trier') {
-      if (profondeur(i) + 1 < NIVEAUX_MAX) {
-        morceaux.push(`<form class="mini-ajout" data-ajout-sous="${i.id}">
-          <input data-garder="sous-${i.id}" placeholder="＋ Ajouter une sous-tâche" autocomplete="off" enterkeyhint="done">
-          <button type="submit" class="mini" aria-label="Ajouter la sous-tâche">＋</button></form>`);
-      }
-      morceaux.push(afficherChecklist(i.id));
-      morceaux.push(`<div class="bloc">
-        <div class="bloc-titre">Notes attachées${notes.length ? ` <span class="compte">${notes.length}</span>` : ''}</div>
-        ${notes.map((n) => `<div class="note-liee"><strong>${echap(libelle(n))}</strong>${n.details && n.details !== n.titre ? `<div>${echap(n.details)}</div>` : ''}</div>`).join('')}
-        <form class="mini-ajout" data-ajout-note="${i.id}">
-          <textarea rows="1" data-garder="note-${i.id}" placeholder="📎 Ajouter une note"></textarea>
-          <button type="submit" class="mini" aria-label="Attacher la note">＋</button></form>
-      </div>`);
-    }
-    if (i.etat !== 'a_trier') {
-      const possibles = parentsPossibles(i);
-      if (possibles.length || i.parent_id) {
-        const options = [`<option value="">${estTache(i) ? 'Aucune (tâche principale)' : 'Aucune'}</option>`]
-          .concat(possibles.map((p) => `<option value="${p.id}" ${p.id === i.parent_id ? 'selected' : ''}>${'  '.repeat(profondeur(p))}${echap(libelle(p))}</option>`));
-        if (i.parent_id && !possibles.some((p) => p.id === i.parent_id)) options.push(`<option value="${i.parent_id}" selected>${echap(libelle(parent))}</option>`);
-        morceaux.push(`<p><label class="choix-cat"><span>${estTache(i) ? 'Sous-tâche de' : 'Attachée à'}</span> <select data-parent-de="${i.id}">${options.join('')}</select></label></p>`);
-      }
-    }
-    if (etat.categories.length && niveau === 0) {
-      const options = [`<option value="">${i.etat === 'a_trier' ? 'Laisser Claude choisir' : 'Sans catégorie'}</option>`]
-        .concat(etat.categories.map((c) => `<option value="${c.id}" ${c.id === i.categorie_id ? 'selected' : ''}>${echap(c.nom)}</option>`));
-      morceaux.push(`<p><label class="choix-cat">Catégorie <select data-categorie-de="${i.id}">${options.join('')}</select></label></p>`);
-    }
-    if (niveau === 0 && i.etat !== 'a_trier') {
-      morceaux.push(`<p><label class="choix-cat">Projet <input class="champ-projet" list="projets-connus" data-projet-de="${i.id}"
-        value="${echap(i.projet || '')}" maxlength="60" placeholder="${TYPES_NOTES.includes(i.type) ? 'Laisser Claude choisir' : 'Aucun'}" autocomplete="off" enterkeyhint="done"></label></p>`);
-    }
-    if (cocher) morceaux.push(blocPlanif(i));
-    detail = `<div class="details">${morceaux.join('') || '<p>Rien de plus.</p>'}</div>`;
-  }
-
+  if (ouvert) detail = fiche(i, { niveau, cocher, cleOuvert, parent, notes, brut });
   let html = `<li class="item${brut ? ' brut' : ''}${niveau ? ' sous-tache' : ''}" data-id="${i.id}">
     ${cocher ? `<button class="case" data-action="fait" data-id="${i.id}" aria-label="Marquer comme fait" title="Fait"></button>` : '<span></span>'}
     <div class="corps" data-action="ouvrir" data-id="${i.id}" data-ouvrir="${cleOuvert}">
       <div class="titre">${echap(libelle(i))}</div>
       ${raison ? `<div class="raison">${echap(raison)}</div>` : ''}
-      ${tags.length ? `<div class="meta">${tags.join('')}</div>` : ''}
+      ${ouvert ? (prog.total ? `<div class="meta">${tags[tags.findIndex((t) => t.includes('data-action="arbre"'))] || ''}</div>` : '')
+        : tags.length ? `<div class="meta">${tags.join('')}</div>` : ''}
     </div>
     ${detail}
   </li>`;
