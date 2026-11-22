@@ -626,7 +626,9 @@ function fiche(i, { niveau, cocher, cleOuvert, parent, notes, brut }) {
     if (cocher) r.push(blocPlanif(i));
     if (cocher && i.etat === 'a_faire') r.push(`<label class="coche-reglage"><input type="checkbox" data-en-cours-de="${i.id}"> En cours (je l'ai commencée)</label>`);
     if (cocher && i.etat === 'en_cours') r.push(`<label class="coche-reglage"><input type="checkbox" data-en-cours-de="${i.id}" checked> En cours (je l'ai commencée)</label>`);
-    parties.push(`<div class="reglages">${r.join('') || '<p class="discret petit">Rien à régler ici.</p>'}</div>`);
+    const quoi = TYPES_NOTES.includes(i.type) ? 'cette note' : 'cette tâche';
+    r.push(`<div class="zone-suppr"><button type="button" class="lien-suppr" data-supprimer-item="${i.id}">🗑 Supprimer ${quoi}</button></div>`);
+    parties.push(`<div class="reglages">${r.join('')}</div>`);
   }
   return `<div class="details">${parties.join('')}</div>`;
 }
@@ -666,6 +668,37 @@ document.addEventListener('click', (e) => {
   const ferme = e.target.closest('[data-ajout-fermer]');
   if (ferme) { etat.ajouts.delete(ferme.dataset.ajoutFermer); afficher(); return; }
 });
+// Suppression (rare) : l'élément passe en « abandonné », il ne disparaît pas de la base et peut être rétabli.
+async function supprimerItem(item) {
+  const note = TYPES_NOTES.includes(item.type);
+  const sous = note ? [] : descendants(item.id);
+  const ok = await demander(note ? 'Supprimer cette note ?' : 'Supprimer cette tâche ?',
+    libelle(item) + (sous.length ? ` (et ${sous.length > 1 ? `ses ${sous.length} sous-tâches` : 'sa sous-tâche'})` : ''), 'Supprimer');
+  if (!ok) return;
+  const touches = [item, ...sous];
+  const anciens = touches.map((t) => [t.id, t.etat]);
+  const res = await Promise.all(touches.map((t) => sb.from('items').update({ etat: 'abandonne' }).eq('id', t.id)));
+  const err = res.find((x) => x.error);
+  if (err) { toast('Suppression impossible : ' + err.error.message); charger(); return; }
+  await sb.from('journal').insert(touches.map((t) => ({ item_id: t.id, action: 'supprime', avant: { etat: t.etat }, apres: { etat: 'abandonne' }, par: 'jeremie' })));
+  etat.ouverts.forEach((k) => { if (k.endsWith(item.id)) etat.ouverts.delete(k); });
+  toast(note ? 'Note supprimée.' : 'Tâche supprimée.', {
+    nom: 'Annuler',
+    faire: async () => {
+      await Promise.all(anciens.map(([id, e]) => sb.from('items').update({ etat: e }).eq('id', id)));
+      await sb.from('journal').insert(anciens.map(([id, e]) => ({ item_id: id, action: 'supprime', avant: { etat: 'abandonne' }, apres: { etat: e, annule: true }, par: 'jeremie' })));
+      charger();
+    },
+  });
+  charger();
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-supprimer-item]');
+  if (!b) return;
+  const item = etat.items.find((i) => i.id === b.dataset.supprimerItem);
+  if (item) supprimerItem(item);
+});
+
 function ouvrirMenuAjout(plus, pop) {
   pop.hidden = false;
   plus.setAttribute('aria-expanded', 'true');

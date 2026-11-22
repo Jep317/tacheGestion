@@ -354,17 +354,16 @@ class DetailActivity : Activity() {
         if (etatActuel == "en_cours" || estNote) enCours.visibility = View.GONE
         if (estNote) fait.text = "Archiver"
         val supprimer = findViewById<Button>(R.id.btn_supprimer)
-        if (!estNote) supprimer.visibility = View.GONE
         supprimer.setOnClickListener {
             android.app.AlertDialog.Builder(this)
-                .setTitle("Supprimer cette note ?")
+                .setTitle(if (estNote) "Supprimer cette note ?" else "Supprimer cette tâche ?")
                 .setMessage(intent.getStringExtra("libelle"))
                 .setNegativeButton("Annuler", null)
                 .setPositiveButton("Supprimer") { _, _ ->
                     supprimer.isEnabled = false
                     enFond({ Supabase.changerEtat(this, id, etatActuel, "abandonne", action = "supprime", par = "jeremie") }) { erreur ->
                         if (erreur == null) {
-                            Toast.makeText(this, "Note supprimée.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, if (estNote) "Note supprimée." else "Tâche supprimée.", Toast.LENGTH_SHORT).show()
                             WidgetTaches.actualiser(this)
                             finish()
                         } else {
