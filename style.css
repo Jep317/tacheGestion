@@ -429,3 +429,6 @@ body.glisse-en-cours, body.glisse-en-cours * { cursor: grabbing !important; -web
 .btn-plus { width: 30px; height: 30px; border-radius: 50%; padding: 0; font-size: 16px; font-weight: 600; }
 .btn-plus[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); transform: rotate(45deg); }
 @keyframes apparait { from { opacity: 0; transform: translateY(-4px); } }
+.zone-suppr { padding-top: 8px; border-top: 1px dashed var(--ligne); text-align: right; }
+.lien-suppr { background: none; border: 0; padding: 2px 0; font-size: 13px; color: var(--discret); }
+.lien-suppr:hover { color: var(--alerte); text-decoration: underline; }
