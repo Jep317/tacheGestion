@@ -31,8 +31,8 @@ class FiltreActivity : Activity() {
             if (sansCategorie) choix += Choix(coche(cat == "") + "Sans catégorie", "", proj)
         }
         if (projets.isNotEmpty()) {
-            choix += Choix(coche(proj == null && cat != null) + "Tous les projets", cat, null)
-            projets.forEach { choix += Choix(coche(proj == it) + "Projet : $it", cat, it) }
+            choix += Choix(coche(proj == null && cat != null) + "Tous les sujets", cat, null)
+            projets.forEach { choix += Choix(coche(proj == it) + "Sujet : $it", cat, it) }
         }
 
         val nuit = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES

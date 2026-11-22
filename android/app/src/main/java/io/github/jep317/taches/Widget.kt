@@ -222,7 +222,7 @@ class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteView
         }
     }
 
-    /** Onglet Notes : notes et idées rangées par projet, comme l'onglet Notes de l'appli. */
+    /** Onglet Notes : notes et idées rangées par sujet et groupe, comme l'onglet Notes de l'appli. */
     private fun construireNotes(items: List<Supabase.Item>): List<Ligne> {
         val notes = items.filter { it.type == "note" || it.type == "idee" }
         if (notes.isEmpty()) return listOf(Ligne.Info("Pas encore de notes. Dicte par exemple « note : code du portail 1234 », Claude la rangera ici."))
@@ -230,12 +230,18 @@ class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteView
         val groupes = notes.groupBy { it.projet?.takeIf { p -> p.isNotBlank() } }
         val noms = groupes.keys.filterNotNull().sortedBy { it.lowercase(Locale.FRANCE) }
         for (nom in noms) {
+            // Sujet, puis ses groupes (sujet › groupe › notes) ; les notes sans groupe d'abord.
             val g = groupes.getValue(nom)
+            val parGroupe = g.groupBy { it.groupe?.trim()?.takeIf { x -> x.isNotEmpty() } }
             res += Ligne.Entete(nom, g.size)
-            g.forEach { res += Ligne.Tache(it) }
+            parGroupe[null]?.forEach { res += Ligne.Tache(it) }
+            parGroupe.keys.filterNotNull().sortedBy { it.lowercase(Locale.FRANCE) }.forEach { gr ->
+                res += Ligne.Entete("$nom › $gr", parGroupe.getValue(gr).size)
+                parGroupe.getValue(gr).forEach { res += Ligne.Tache(it) }
+            }
         }
         groupes[null]?.let { g ->
-            res += Ligne.Entete(if (noms.isEmpty()) "Notes et idées" else "Sans projet", g.size)
+            res += Ligne.Entete(if (noms.isEmpty()) "Notes et idées" else "Sans sujet", g.size)
             g.forEach { res += Ligne.Tache(it) }
         }
         return res

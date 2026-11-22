@@ -138,7 +138,7 @@ async function charger() {
   if (glisse) { glisse.recharger = true; return; }
   const [items, cats, liens, lignes, props, articles, rappels, questions] = await Promise.all([
     sb.from('items')
-      .select('id, texte_brut, titre, details, type, categorie_id, horizon, etat, theme, projet, ordre, echeance, echeance_heure, recurrence, cree_le, parent_id, priorite_jour, priorite_rang, priorite_raison, special')
+      .select('id, texte_brut, titre, details, type, categorie_id, horizon, etat, theme, projet, groupe, ordre, echeance, echeance_heure, recurrence, cree_le, parent_id, priorite_jour, priorite_rang, priorite_raison, special')
       .in('etat', ['a_trier', 'a_faire', 'en_cours'])
       .order('ordre', { ascending: true, nullsFirst: false })
       .order('cree_le', { ascending: true }),
@@ -548,7 +548,7 @@ function infosDe(i, parent) {
   const cat = categorie(i.categorie_id);
   const morceaux = [];
   if (cat) morceaux.push(`<span class="c${couleur(cat.id)}">● ${echap(cat.nom)}</span>`);
-  if (i.projet) morceaux.push(`${echap(i.projet)}`);
+  if (i.projet) morceaux.push(echap(i.projet) + (i.groupe ? ' › ' + echap(i.groupe) : ''));
   if (i.type === 'idee') morceaux.push('Idée');
   if (i.type === 'course') morceaux.push('Course');
   if (morceaux.length) ligne('🏷', morceaux.join(' · '), 'discret');
@@ -627,8 +627,14 @@ function fiche(i, { niveau, cocher, cleOuvert, parent, notes, brut }) {
       r.push(`<label class="choix-cat"><span>Catégorie</span> <select data-categorie-de="${i.id}">${options.join('')}</select></label>`);
     }
     if (niveau === 0 && i.etat !== 'a_trier') {
-      r.push(`<label class="choix-cat"><span>Projet</span> <input class="champ-projet" list="projets-connus" data-projet-de="${i.id}"
+      r.push(`<label class="choix-cat"><span>Sujet</span> <input class="champ-projet" list="projets-connus" data-projet-de="${i.id}"
         value="${echap(i.projet || '')}" maxlength="60" placeholder="${TYPES_NOTES.includes(i.type) ? 'Laisser Claude choisir' : 'Aucun'}" autocomplete="off" enterkeyhint="done"></label>`);
+      // Groupe : un second niveau à l'intérieur du sujet (ex. Impro › Banque d'exos), pour les notes.
+      if (TYPES_NOTES.includes(i.type) && (i.projet || i.groupe)) {
+        const connus = groupesDuSujet(i.projet).map((g) => `<option value="${echap(g)}"></option>`).join('');
+        r.push(`<label class="choix-cat"><span>Groupe</span> <input class="champ-projet" list="groupes-${i.id}" data-groupe-de="${i.id}"
+          value="${echap(i.groupe || '')}" maxlength="60" placeholder="Aucun" autocomplete="off" enterkeyhint="done"><datalist id="groupes-${i.id}">${connus}</datalist></label>`);
+      }
     }
     if (cocher) r.push(blocPlanif(i));
     if (cocher && i.etat === 'a_faire') r.push(`<label class="coche-reglage"><input type="checkbox" data-en-cours-de="${i.id}"> En cours (je l'ai commencée)</label>`);
@@ -864,11 +870,11 @@ function afficherProjets() {
   const zone = $('#projets');
   zone.hidden = BUREAU || !liste.length;
   if (zone.hidden) { zone.innerHTML = ''; return; }
-  const boutons = [['', 'Tous les projets'], ...liste.map((p) => [p.cle, p.nom])];
-  if (sans) boutons.push([SANS_PROJET, 'Sans projet']);
+  const boutons = [['', 'Tous les sujets'], ...liste.map((p) => [p.cle, p.nom])];
+  if (sans) boutons.push([SANS_PROJET, 'Sans sujet']);
   zone.innerHTML = boutons
     .map(([cle, nom]) => `<button data-projet="${echap(cle)}" aria-pressed="${etat.projet === cle}">${echap(nom)}</button>`)
-    .join('') + '<button class="regler" data-gerer-projets aria-label="Gérer les projets" title="Gérer les projets">⚙</button>';
+    .join('') + '<button class="regler" data-gerer-projets aria-label="Gérer les sujets" title="Gérer les sujets">⚙</button>';
   montrerChoix(zone);
 }
 
@@ -1050,16 +1056,16 @@ function afficher() {
   const q = etat.recherche.toLowerCase();
   const notes = liste
     .filter((i) => i.etat !== 'a_trier' && TYPES_NOTES.includes(i.type))
-    .filter((i) => !q || [i.titre, i.texte_brut, i.details, i.theme, i.projet].some((t) => (t || '').toLowerCase().includes(q)));
+    .filter((i) => !q || [i.titre, i.texte_brut, i.details, i.theme, i.projet, i.groupe].some((t) => (t || '').toLowerCase().includes(q)));
   let htmlNotes;
   if (!notes.length) htmlNotes = `<div class="vide">${q ? 'Aucune note ne correspond.' : 'Pas encore de notes.'}</div>`;
-  else if (etat.projet) htmlNotes = `<ul class="items">${notes.map((i) => carte(i, { cocher: false })).join('')}</ul>`;
+  else if (etat.projet) htmlNotes = notesParGroupe(notes, etat.projet, q);
   else {
     // Tous les projets : les notes sont regroupées par projet, celles sans projet à la fin.
     const groupes = new Map();
     for (const n of notes) {
       const cle = cleProjet(n.projet);
-      if (!groupes.has(cle)) groupes.set(cle, { nom: cle ? n.projet.trim() : 'Sans projet', notes: [] });
+      if (!groupes.has(cle)) groupes.set(cle, { nom: cle ? n.projet.trim() : 'Sans sujet', notes: [] });
       groupes.get(cle).notes.push(n);
     }
     const ordre = [...groupes.entries()].sort(([a, ga], [b, gb]) => (!a) - (!b) || ga.nom.localeCompare(gb.nom, 'fr'));
@@ -1072,13 +1078,59 @@ function afficher() {
         const ouvert = q || g.notes.some((n) => etat.ouverts.has(n.id)) || (etat.sections[k] ?? false);
         return `<details class="groupe-projet" data-section="${echap(k)}" ${ouvert ? 'open' : ''}>
           <summary><span class="nom">${echap(g.nom)}</span> <span class="compte">${g.notes.length}</span></summary>
-          <ul class="items">${g.notes.map((i) => carte(i, { cocher: false })).join('')}</ul>
+          ${notesParGroupe(g.notes, cle || SANS_PROJET, q)}
         </details>`;
       }).join('');
   }
   $('#liste-notes').innerHTML = htmlNotes;
   afficherCourses();
   restaurerSaisies(garde);
+}
+
+/** Notes d'un sujet : d'abord celles sans groupe, puis un bloc repliable par groupe (fermé par défaut, mémorisé). */
+function notesParGroupe(notes, cleSujet, q) {
+  const sans = notes.filter((n) => !cleProjet(n.groupe));
+  const groupes = new Map();
+  for (const n of notes) {
+    const cle = cleProjet(n.groupe);
+    if (!cle) continue;
+    if (!groupes.has(cle)) groupes.set(cle, { nom: n.groupe.trim(), notes: [] });
+    groupes.get(cle).notes.push(n);
+  }
+  const ul = (l) => `<ul class="items">${l.map((i) => carte(i, { cocher: false })).join('')}</ul>`;
+  return (sans.length ? ul(sans) : '') + [...groupes.entries()]
+    .sort(([, a], [, b]) => a.nom.localeCompare(b.nom, 'fr'))
+    .map(([cle, g]) => {
+      const k = 'notes:' + cleSujet + '>' + cle;
+      const ouvert = q || g.notes.some((n) => etat.ouverts.has(n.id)) || (etat.sections[k] ?? false);
+      return `<details class="groupe-projet sous-groupe" data-section="${echap(k)}" ${ouvert ? 'open' : ''}>
+        <summary><span class="nom">${echap(g.nom)}</span> <span class="compte">${g.notes.length}</span></summary>
+        ${ul(g.notes)}
+      </details>`;
+    }).join('');
+}
+
+/** Groupes déjà utilisés dans un sujet (pour les proposer dans la fiche). */
+function groupesDuSujet(sujet) {
+  const cle = cleProjet(sujet);
+  const vus = new Map();
+  for (const i of etat.items) {
+    if (cleProjet(i.projet) !== cle || !cleProjet(i.groupe) || ['fait', 'abandonne'].includes(i.etat)) continue;
+    if (!vus.has(cleProjet(i.groupe))) vus.set(cleProjet(i.groupe), i.groupe.trim());
+  }
+  return [...vus.values()].sort((a, b) => a.localeCompare(b, 'fr'));
+}
+
+async function changerGroupe(item, saisi) {
+  let nom = saisi.trim().replace(/\s+/g, ' ') || null;
+  const existant = nom && groupesDuSujet(item.projet).find((g) => cleProjet(g) === cleProjet(nom));
+  if (existant) nom = existant;
+  if ((nom || null) === ((item.groupe || '').trim() || null)) return;
+  const { error } = await sb.from('items').update({ groupe: nom }).eq('id', item.id);
+  if (error) { toast('Modification impossible : ' + error.message); charger(); return; }
+  await sb.from('journal').insert({ item_id: item.id, action: 'groupe_change', avant: { groupe: item.groupe ?? null }, apres: { groupe: nom }, par: 'jeremie' });
+  toast(nom ? 'Groupe : « ' + nom + ' ».' : 'Retirée de son groupe.');
+  charger();
 }
 
 // Le temps réel redessine tout : on garde ce qui est en cours de saisie dans les fiches ouvertes.
@@ -1560,6 +1612,12 @@ document.addEventListener('change', (e) => {
     if (item && (par.value || null) !== item.parent_id) changerParent(item, par.value);
     return;
   }
+  const gr = e.target.closest('[data-groupe-de]');
+  if (gr) {
+    const item = etat.items.find((i) => i.id === gr.dataset.groupeDe);
+    if (item) changerGroupe(item, gr.value);
+    return;
+  }
   const pj = e.target.closest('[data-projet-de]');
   if (pj) {
     const item = etat.items.find((i) => i.id === pj.dataset.projetDe);
@@ -1910,8 +1968,11 @@ async function changerProjet(item, saisi) {
   const existant = nom && tousLesProjets().find((p) => p.cle === cleProjet(nom));
   if (existant) nom = existant.nom;
   if ((nom || null) === ((item.projet || '').trim() || null)) return;
+  if (item.groupe && cleProjet(nom) !== cleProjet(item.projet)) {
+    await sb.from('items').update({ groupe: null }).eq('id', item.id);
+  }
   if (await poserProjet([item], nom, 'projet_change')) {
-    toast(nom ? 'Projet : « ' + nom + ' ».' : 'Retiré de son projet.');
+    toast(nom ? 'Sujet : « ' + nom + ' ».' : 'Retiré de son sujet.');
     charger();
   }
 }
@@ -1921,10 +1982,10 @@ function afficherGestionProjets() {
   const compte = (p) => [p.taches && `${p.taches} tâche${p.taches > 1 ? 's' : ''}`, p.notes && `${p.notes} note${p.notes > 1 ? 's' : ''}`].filter(Boolean).join(', ');
   $('#liste-projets').innerHTML = projets.length ? projets.map((p) => `
     <li>
-      <input value="${echap(p.nom)}" maxlength="60" aria-label="Nom du projet" data-renommer-projet="${echap(p.cle)}">
+      <input value="${echap(p.nom)}" maxlength="60" aria-label="Nom du sujet" data-renommer-projet="${echap(p.cle)}">
       <span class="discret petit compte-projet">${compte(p)}</span>
-      <button class="rond petit" data-retirer-projet="${echap(p.cle)}" aria-label="Supprimer le projet" title="Supprimer le projet">✕</button>
-    </li>`).join('') : '<li class="discret">Aucun projet pour l\'instant.</li>';
+      <button class="rond petit" data-retirer-projet="${echap(p.cle)}" aria-label="Supprimer le sujet" title="Supprimer le sujet">✕</button>
+    </li>`).join('') : '<li class="discret">Aucun sujet pour l\'instant.</li>';
 }
 function ouvrirGestionProjets() { afficherGestionProjets(); $('#dlg-projets').hidden = false; }
 function fermerGestionProjets() { $('#dlg-projets').hidden = true; }
@@ -1946,13 +2007,13 @@ async function renommerProjet(cle, saisi) {
 async function retirerProjet(cle) {
   const p = tousLesProjets().find((x) => x.cle === cle);
   if (!p) return;
-  const msg = `Supprimer le projet « ${p.nom} » ? Ses éléments restent dans ta liste, sans projet.`
-    + (p.notes ? ' Claude rangera les notes dans un autre projet au prochain tri.' : '');
+  const msg = `Supprimer le sujet « ${p.nom} » ? Ses éléments restent dans ta liste, sans sujet.`
+    + (p.notes ? ' Claude rangera les notes dans un autre sujet au prochain tri.' : '');
   if (!confirm(msg)) return;
   const items = etat.items.filter((i) => cleProjet(i.projet) === cle);
   if (!(await poserProjet(items, null, 'projet_supprime'))) return;
   if (etat.projet === cle) { etat.projet = ''; ecrire('projet', ''); }
-  toast(`Projet « ${p.nom} » supprimé.`);
+  toast(`Sujet « ${p.nom} » supprimé.`);
   charger();
 }
 
@@ -1971,7 +2032,7 @@ $('#btn-fermer-projets').addEventListener('click', fermerGestionProjets);
 $('#dlg-projets').addEventListener('click', (e) => { if (e.target.id === 'dlg-projets') fermerGestionProjets(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#dlg-projets').hidden) fermerGestionProjets(); });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && e.target.matches('[data-projet-de]')) { e.preventDefault(); e.target.blur(); }
+  if (e.key === 'Enter' && e.target.matches('[data-projet-de], [data-groupe-de]')) { e.preventDefault(); e.target.blur(); }
 });
 
 // ---------- glisser-déposer des tâches : changer d'horizon ou d'ordre ----------

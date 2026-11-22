@@ -56,7 +56,7 @@ object Details {
         i.echeance?.let { m += dateCourte(it) + (i.echeanceHeure?.let { h -> " " + heureCourte(h) } ?: "") }
         if (i.recurrent) m += "🔁"
         i.theme?.let { m += it }
-        i.projet?.let { m += it }
+        i.projet?.let { m += it + (i.groupe?.let { g -> " › $g" } ?: "") }
         return m.joinToString(" · ")
     }
 
