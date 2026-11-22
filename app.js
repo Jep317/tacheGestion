@@ -25,6 +25,7 @@ const etat = {
   vue: 'liste',
   categories: [],            // catégories choisies par Jérémie (table categories)
   filtre: lire('filtre') || 'tout', // 'tout', 'aucune' ou l'id d'une catégorie
+  projet: lire('projet') || '',      // '' = tous les projets, '-' = sans projet, sinon le nom du projet (rangé par Claude)
   recherche: '',
   ouverts: new Set(),        // éléments dont on affiche le détail
   sections: BUREAU ? {} : JSON.parse(lire('sections') || '{}'),
@@ -254,6 +255,53 @@ function filtreCategorie(i) {
   return i.categorie_id === etat.filtre;
 }
 
+// ---------- projets (rangés par Claude dans items.projet) ----------
+const SANS_PROJET = '-';
+function typesVue() { return etat.vue === 'notes' ? TYPES_NOTES : TYPES_LISTE; }
+function cleProjet(nom) { return (nom || '').trim().toLowerCase(); }
+function filtreProjet(i) {
+  if (!etat.projet) return true;
+  if (etat.projet === SANS_PROJET) return !cleProjet(i.projet);
+  return cleProjet(i.projet) === etat.projet;
+}
+
+// Les projets proposés sont ceux des éléments de l'onglet affiché (catégorie comprise).
+function projetsVisibles() {
+  const types = typesVue();
+  const vus = new Map();
+  let sans = false;
+  for (const i of etat.items) {
+    if (i.etat === 'a_trier' || !types.includes(i.type) || !filtreCategorie(i)) continue;
+    const cle = cleProjet(i.projet);
+    if (!cle) { sans = true; continue; }
+    const p = vus.get(cle) || { cle, nom: i.projet.trim(), n: 0 };
+    p.n++;
+    vus.set(cle, p);
+  }
+  const liste = [...vus.values()].sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+  return { liste, sans };
+}
+
+function afficherProjets() {
+  const { liste, sans } = projetsVisibles();
+  if (etat.projet && etat.projet !== SANS_PROJET && !liste.some((p) => p.cle === etat.projet)) etat.projet = '';
+  if (etat.projet === SANS_PROJET && !sans) etat.projet = '';
+  const zone = $('#projets');
+  zone.hidden = BUREAU || !liste.length;
+  if (zone.hidden) { zone.innerHTML = ''; return; }
+  const boutons = [['', 'Tous les projets'], ...liste.map((p) => [p.cle, p.nom])];
+  if (sans) boutons.push([SANS_PROJET, 'Sans projet']);
+  zone.innerHTML = boutons
+    .map(([cle, nom]) => `<button data-projet="${echap(cle)}" aria-pressed="${etat.projet === cle}">${echap(nom)}</button>`)
+    .join('');
+}
+
+function choisirProjet(p) {
+  etat.projet = etat.projet === p ? '' : p;
+  ecrire('projet', etat.projet);
+  afficher();
+}
+
 function carte(i, { cocher = true } = {}) {
   const brut = !i.titre;
   const ouvert = etat.ouverts.has(i.id);
@@ -265,7 +313,7 @@ function carte(i, { cocher = true } = {}) {
   if (i.etat === 'en_cours') tags.push('<span class="tag">En cours</span>');
   if (i.echeance) tags.push(`<span class="tag echeance">${dateCourte(i.echeance)}</span>`);
   if (i.theme) tags.push(`<span>${echap(i.theme)}</span>`);
-  if (i.projet) tags.push(`<span>· ${echap(i.projet)}</span>`);
+  if (i.projet && !etat.projet && etat.vue !== 'notes') tags.push(`<span>· ${echap(i.projet)}</span>`);
 
   let detail = '';
   if (ouvert) {
@@ -300,8 +348,9 @@ function section(cle, nom, items, ouvertParDefaut, classe = '') {
 }
 
 function afficher() {
-  // Liste par horizon
-  const liste = etat.items.filter((i) => filtreCategorie(i));
+  afficherProjets();
+  // Liste par horizon (« À trier » n'a pas encore de projet : on le montre toujours)
+  const liste = etat.items.filter((i) => filtreCategorie(i) && (i.etat === 'a_trier' || filtreProjet(i)));
   const aTrier = liste.filter((i) => i.etat === 'a_trier');
   let html = '';
   if (aTrier.length) html += section('a_trier', 'À trier', aTrier, true, 'a-trier');
@@ -319,9 +368,24 @@ function afficher() {
   const notes = liste
     .filter((i) => i.etat !== 'a_trier' && TYPES_NOTES.includes(i.type))
     .filter((i) => !q || [i.titre, i.texte_brut, i.details, i.theme, i.projet].some((t) => (t || '').toLowerCase().includes(q)));
-  $('#liste-notes').innerHTML = notes.length
-    ? `<ul class="items">${notes.map((i) => carte(i, { cocher: false })).join('')}</ul>`
-    : `<div class="vide">${q ? 'Aucune note ne correspond.' : 'Pas encore de notes.'}</div>`;
+  let htmlNotes;
+  if (!notes.length) htmlNotes = `<div class="vide">${q ? 'Aucune note ne correspond.' : 'Pas encore de notes.'}</div>`;
+  else if (etat.projet) htmlNotes = `<ul class="items">${notes.map((i) => carte(i, { cocher: false })).join('')}</ul>`;
+  else {
+    // Tous les projets : les notes sont regroupées par projet, celles sans projet à la fin.
+    const groupes = new Map();
+    for (const n of notes) {
+      const cle = cleProjet(n.projet);
+      if (!groupes.has(cle)) groupes.set(cle, { nom: cle ? n.projet.trim() : 'Sans projet', notes: [] });
+      groupes.get(cle).notes.push(n);
+    }
+    const ordre = [...groupes.entries()].sort(([a, ga], [b, gb]) => (!a) - (!b) || ga.nom.localeCompare(gb.nom, 'fr'));
+    htmlNotes = ordre.length === 1 && !ordre[0][0]
+      ? `<ul class="items">${notes.map((i) => carte(i, { cocher: false })).join('')}</ul>`
+      : ordre.map(([cle, g]) => `<h3 class="groupe-projet"><button class="lien" data-projet="${echap(cle || SANS_PROJET)}">${echap(g.nom)}</button> <span class="compte">${g.notes.length}</span></h3>
+        <ul class="items">${g.notes.map((i) => carte(i, { cocher: false })).join('')}</ul>`).join('');
+  }
+  $('#liste-notes').innerHTML = htmlNotes;
 }
 
 // ---------- interactions ----------
@@ -356,7 +420,14 @@ document.querySelectorAll('[data-vue]').forEach((b) => b.addEventListener('click
   document.querySelectorAll('[data-vue]').forEach((x) => x.setAttribute('aria-selected', x === b));
   $('#vue-liste').hidden = etat.vue !== 'liste';
   $('#vue-notes').hidden = etat.vue !== 'notes';
+  afficher();
 }));
+
+// Filtre par projet : les puces de l'entête et les titres de groupe dans « Notes ».
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-projet]');
+  if (b) choisirProjet(b.dataset.projet);
+});
 
 $('#filtres').addEventListener('click', (e) => {
   const b = e.target.closest('button');

@@ -63,6 +63,12 @@ input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 
 .onglets button, .espaces button { border: 0; background: none; border-radius: 999px; padding: 6px 12px; font-size: 14px; }
 #filtres { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 #filtres button { white-space: nowrap; flex: none; }
+#projets { max-width: 100%; overflow-x: auto; scrollbar-width: none; flex-basis: 100%; background: none; border: 0; padding: 0; }
+#projets button { white-space: nowrap; flex: none; border: 1px solid var(--ligne); background: var(--carte); font-size: 13px; padding: 4px 10px; }
+#projets button[aria-pressed="true"] { background: var(--accent); color: var(--accent-texte); border-color: var(--accent); font-weight: 600; }
+.groupe-projet { font-size: 15px; margin: 16px 0 4px; display: flex; align-items: baseline; gap: 6px; }
+.groupe-projet .lien { font: inherit; font-weight: 600; color: inherit; padding: 0; text-decoration: none; }
+.groupe-projet .compte { color: var(--discret); font-weight: 400; font-size: 14px; }
 #filtres .regler { color: var(--discret); padding: 6px 10px; }
 .onglets button[aria-selected="true"], .espaces button[aria-pressed="true"] { background: var(--accent); color: var(--accent-texte); font-weight: 600; }
 
