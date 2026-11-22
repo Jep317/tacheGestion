@@ -58,6 +58,13 @@
             android:text="🛒 Liste de courses" />
 
         <Button
+            android:id="@+id/btn_notes"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="📝 Mes notes et idées" />
+
+        <Button
             android:id="@+id/btn_appli"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

@@ -1383,11 +1383,12 @@ let revueDemandee = false;
 function actionsDeLancement() {
   const p = new URLSearchParams(location.search);
   if (p.has('courses')) document.querySelector('[data-vue="courses"]').click();
+  if (p.has('notes')) document.querySelector('[data-vue="notes"]').click();
   if (p.has('ajout')) saisie.focus();
   if (p.has('vocal')) demarrerDictee();
   if (p.has('categories')) ouvrirGestion();
   if (p.has('revue')) revueDemandee = true; // ouverte dès que les propositions sont chargées
-  if (p.has('courses') || p.has('ajout') || p.has('vocal') || p.has('categories') || p.has('revue') || p.has('item')) history.replaceState(null, '', location.pathname + (BUREAU ? '?bureau=1' : ''));
+  if (p.has('courses') || p.has('notes') || p.has('ajout') || p.has('vocal') || p.has('categories') || p.has('revue') || p.has('item')) history.replaceState(null, '', location.pathname + (BUREAU ? '?bureau=1' : ''));
 }
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

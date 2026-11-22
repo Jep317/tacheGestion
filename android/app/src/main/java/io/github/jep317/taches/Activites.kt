@@ -148,6 +148,7 @@ class MainActivity : Activity() {
         }
         findViewById<Button>(R.id.btn_ajouter).setOnClickListener { startActivity(Intent(this, AjoutActivity::class.java)) }
         findViewById<Button>(R.id.btn_courses).setOnClickListener { startActivity(Intent(this, CoursesActivity::class.java)) }
+        findViewById<Button>(R.id.btn_notes).setOnClickListener { ouvrirAppliWeb(this, "?notes=1") }
         findViewById<Button>(R.id.btn_appli).setOnClickListener { ouvrirAppliWeb(this) }
         findViewById<Button>(R.id.btn_categories).setOnClickListener { ouvrirAppliWeb(this, "?categories=1") }
         findViewById<Button>(R.id.btn_deconnexion).setOnClickListener {
