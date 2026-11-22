@@ -12,7 +12,7 @@
 
     <!-- Rond à toucher pour terminer la tâche (avec confirmation). -->
     <TextView
-        android:id="@+id/case"
+        android:id="@+id/rond"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="-6dp"

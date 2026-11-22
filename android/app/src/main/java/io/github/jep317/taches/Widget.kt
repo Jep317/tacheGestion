@@ -302,11 +302,11 @@ class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteView
                 setViewVisibility(R.id.meta, if (meta.isEmpty()) View.GONE else View.VISIBLE)
                 setOnClickFillInIntent(R.id.ligne, Details.intention(i))
                 if (i.type == "note" || i.type == "idee") {
-                    setTextViewText(R.id.case, "•")
+                    setTextViewText(R.id.rond, "•")
                 } else {
-                    setTextViewText(R.id.case, "○")
+                    setTextViewText(R.id.rond, "○")
                     // Toucher le rond : terminer, après confirmation.
-                    setOnClickFillInIntent(R.id.case, Details.intention(i).putExtra("action", "terminer"))
+                    setOnClickFillInIntent(R.id.rond, Details.intention(i).putExtra("action", "terminer"))
                 }
             }
         }
