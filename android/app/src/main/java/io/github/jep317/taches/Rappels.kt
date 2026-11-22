@@ -109,7 +109,7 @@ object Rappels {
             if (item != null && item.optString("etat") in setOf("fait", "abandonne")) continue
             val t = try { java.time.OffsetDateTime.parse(quand).toInstant().toEpochMilli() } catch (e: Exception) { continue }
             if (t < maintenant - 3600_000) continue
-            val pi = alarme(ctx, r, PendingIntent.FLAG_UPDATE_CURRENT)
+            val pi = alarme(ctx, r, PendingIntent.FLAG_UPDATE_CURRENT) ?: continue
             val declenche = maxOf(t, maintenant + 1000)
             if (Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()) {
                 am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, declenche, pi)
