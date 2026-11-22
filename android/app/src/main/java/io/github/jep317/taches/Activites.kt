@@ -1,11 +1,13 @@
 package io.github.jep317.taches
 
+import android.Manifest
 import android.app.Activity
 import android.appwidget.AppWidgetManager
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -166,10 +168,15 @@ class AjoutActivity : Activity() {
     companion object {
         const val VOCAL = "vocal"
         private const val CODE_DICTEE = 1
+        private const val CODE_MICRO = 3
     }
 
     private lateinit var saisie: EditText
+    private lateinit var statut: TextView
+    private lateinit var micro: ImageButton
     private var source = "widget"
+    private var dictee: DicteeContinue? = null
+    private val vientDuWidget get() = intent.getBooleanExtra(VOCAL, false)
 
     override fun onCreate(etat: Bundle?) {
         super.onCreate(etat)
@@ -181,14 +188,16 @@ class AjoutActivity : Activity() {
         }
         setContentView(R.layout.ecran_ajout)
         saisie = findViewById(R.id.saisie)
+        statut = findViewById(R.id.statut_dictee)
+        micro = findViewById(R.id.btn_micro)
         val envoyer = findViewById<Button>(R.id.btn_envoyer)
-        findViewById<ImageButton>(R.id.btn_micro).setOnClickListener { dicter() }
+        micro.setOnClickListener { if (dictee?.active == true) dictee?.terminer() else dicter() }
         findViewById<Button>(R.id.btn_annuler).setOnClickListener { finish() }
         envoyer.setOnClickListener { envoyer(envoyer) }
         saisie.setOnEditorActionListener { _, action, _ ->
             if (action == EditorInfo.IME_ACTION_SEND) { envoyer(envoyer); true } else false
         }
-        if (etat == null && intent.getBooleanExtra(VOCAL, false)) {
+        if (etat == null && vientDuWidget) {
             dicter()
         } else {
             saisie.requestFocus()
@@ -196,7 +205,59 @@ class AjoutActivity : Activity() {
         }
     }
 
+    override fun onPause() {
+        super.onPause()
+        // Écran quitté (appel, autre appli) : on arrête d'écouter mais on garde le texte.
+        dictee?.terminer()
+    }
+
+    override fun onDestroy() {
+        dictee?.liberer()
+        super.onDestroy()
+    }
+
+    /** Dictée longue : écoute jusqu'à ce que Jérémie touche le micro, même s'il fait des pauses. */
     private fun dicter() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), CODE_MICRO)
+            return
+        }
+        val d = dictee ?: DicteeContinue(
+            this,
+            surTexte = { t ->
+                saisie.setText(t)
+                saisie.setSelection(saisie.text.length)
+                source = "vocal"
+            },
+            surFin = { erreur -> finDictee(erreur) },
+        ).also { dictee = it }
+        d.demarrer(saisie.text.toString())
+        if (!d.active) return
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        statut.visibility = View.VISIBLE
+        statut.text = "🎙 J'écoute… Parle aussi longtemps que tu veux, même avec des pauses. Touche ■ pour finir."
+        micro.setImageResource(R.drawable.ic_stop)
+        micro.contentDescription = "Terminer la dictée"
+    }
+
+    private fun finDictee(erreur: String?) {
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        micro.setImageResource(R.drawable.ic_micro)
+        micro.contentDescription = "Dicter"
+        if (erreur != null) {
+            statut.visibility = View.VISIBLE
+            statut.text = erreur
+        } else if (saisie.text.isNotBlank()) {
+            statut.visibility = View.VISIBLE
+            statut.text = "Relis si tu veux, puis « Ajouter ». Claude découpera en tâches et notes."
+        } else {
+            statut.visibility = View.GONE
+        }
+    }
+
+    /** Ancienne dictée (une phrase) si le micro n'est pas autorisé. */
+    private fun dicterUnePhrase() {
         val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fr-FR")
@@ -207,6 +268,12 @@ class AjoutActivity : Activity() {
         } catch (_: ActivityNotFoundException) {
             Toast.makeText(this, "Dictée indisponible sur ce téléphone.", Toast.LENGTH_LONG).show()
         }
+    }
+
+    override fun onRequestPermissionsResult(code: Int, permissions: Array<out String>, resultats: IntArray) {
+        super.onRequestPermissionsResult(code, permissions, resultats)
+        if (code != CODE_MICRO) return
+        if (resultats.firstOrNull() == PackageManager.PERMISSION_GRANTED) dicter() else dicterUnePhrase()
     }
 
     @Deprecated("API Activity simple, sans AndroidX")
@@ -220,13 +287,14 @@ class AjoutActivity : Activity() {
             saisie.setText(if (avant.isEmpty()) texte else "$avant $texte")
             saisie.setSelection(saisie.text.length)
             source = "vocal"
-        } else if (saisie.text.isBlank() && intent.getBooleanExtra(VOCAL, false)) {
+        } else if (saisie.text.isBlank() && vientDuWidget) {
             // Dictée annulée depuis le bouton micro du widget : on referme sans rien laisser à l'écran.
             finish()
         }
     }
 
     private fun envoyer(bouton: Button) {
+        dictee?.terminer()
         val texte = saisie.text.toString().trim()
         if (texte.isEmpty()) return
         bouton.isEnabled = false
