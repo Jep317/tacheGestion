@@ -36,6 +36,13 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".CoursesActivity"
+            android:exported="false"
+            android:label="Courses"
+            android:taskAffinity=".courses"
+            android:windowSoftInputMode="adjustResize|stateVisible" />
+
+        <activity
             android:name=".DetailActivity"
             android:excludeFromRecents="true"
             android:exported="false"

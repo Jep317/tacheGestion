@@ -131,6 +131,7 @@ class MainActivity : Activity() {
             poser.visibility = View.GONE
         }
         findViewById<Button>(R.id.btn_ajouter).setOnClickListener { startActivity(Intent(this, AjoutActivity::class.java)) }
+        findViewById<Button>(R.id.btn_courses).setOnClickListener { startActivity(Intent(this, CoursesActivity::class.java)) }
         findViewById<Button>(R.id.btn_appli).setOnClickListener { ouvrirAppliWeb(this) }
         findViewById<Button>(R.id.btn_categories).setOnClickListener { ouvrirAppliWeb(this, "?categories=1") }
         findViewById<Button>(R.id.btn_deconnexion).setOnClickListener {
@@ -228,6 +229,11 @@ class AjoutActivity : Activity() {
 class DetailActivity : Activity() {
     override fun onCreate(etat: Bundle?) {
         super.onCreate(etat)
+        if (intent.getBooleanExtra("courses", false)) {
+            startActivity(Intent(this, CoursesActivity::class.java))
+            finish()
+            return
+        }
         val id = intent.getStringExtra("id")
         if (id == null) {
             // Ligne de résumé : ouvrir l'appli complète (ou la connexion si besoin).

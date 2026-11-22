@@ -144,7 +144,7 @@ object Supabase {
     fun lireListe(ctx: Context): List<Item> {
         val j = jeton(ctx)
         val chemin = "/rest/v1/items?select=id,texte_brut,titre,details,type,categorie:categories(nom),horizon,etat,theme,projet,echeance,parent_id,priorite_jour,priorite_rang" +
-            "&etat=in.(a_trier,a_faire,en_cours)&order=ordre.asc.nullslast,cree_le.asc"
+            "&etat=in.(a_trier,a_faire,en_cours)&special=is.null&order=ordre.asc.nullslast,cree_le.asc"
         val liste = JSONArray(requete("GET", chemin, null, j))
         // Sous-tâches (faites comprises) et checklists, pour afficher « 2/5 » et « ☑ 2/4 ».
         val liens = JSONArray(requete("GET", "/rest/v1/items?select=id,parent_id,etat,type,titre,texte_brut&parent_id=not.is.null", null, j))
@@ -181,6 +181,14 @@ object Supabase {
             o.put("_sous_faites", faites[id] ?: 0).put("_sous_total", total[id] ?: 0)
             o.put("_check_cochees", cochees[id] ?: 0).put("_check_total", lignesTotal[id] ?: 0)
         }
+        // Liste de courses : nombre d'articles restant à acheter, pour la ligne « 🛒 Courses » du widget.
+        try {
+            val c = JSONArray(requete("GET", "/rest/v1/items?select=id&special=eq.courses", null, j))
+            if (c.length() > 0) {
+                val idCourses = c.getJSONObject(0).getString("id")
+                Cache.ecrireCourses(ctx, (lignesTotal[idCourses] ?: 0) - (cochees[idCourses] ?: 0))
+            }
+        } catch (_: Exception) {}
         val texte = liste.toString()
         Cache.ecrire(ctx, texte)
         return analyser(texte)
@@ -234,6 +242,42 @@ object Supabase {
         journal(j, id, if (nouvelEtat == "fait") "termine" else "modifie", JSONObject().put("etat", ancienEtat), maj)
     }
 
+    // ---------- liste de courses (tâche spéciale ; ses articles sont les lignes de sa checklist) ----------
+    class Article(val id: String, val texte: String, var coche: Boolean, val ordre: Int = 0)
+
+    /** Identifiant de la tâche « 🛒 Courses ». */
+    fun idCourses(ctx: Context): String {
+        val rep = JSONArray(requete("GET", "/rest/v1/items?select=id&special=eq.courses", null, jeton(ctx)))
+        if (rep.length() == 0) throw ErreurApi(404, "Liste de courses introuvable")
+        return rep.getJSONObject(0).getString("id")
+    }
+
+    fun lireArticles(ctx: Context, idCourses: String): List<Article> {
+        val rep = JSONArray(requete("GET", "/rest/v1/checklist?select=id,texte,coche,ordre&item_id=eq.$idCourses&order=ordre.asc,cree_le.asc", null, jeton(ctx)))
+        return (0 until rep.length()).map { rep.getJSONObject(it).let { o -> Article(o.getString("id"), o.optString("texte"), o.optBoolean("coche"), o.optInt("ordre")) } }
+    }
+
+    /** Articles déjà achetés, les plus fréquents d'abord (suggestions). */
+    fun lireHistorique(ctx: Context): List<String> {
+        val rep = JSONArray(requete("GET", "/rest/v1/articles_courses?select=nom&order=fois.desc,dernier.desc&limit=300", null, jeton(ctx)))
+        return (0 until rep.length()).map { rep.getJSONObject(it).optString("nom") }.filter { it.isNotBlank() }
+    }
+
+    fun ajouterArticles(ctx: Context, idCourses: String, textes: List<String>, ordreDepart: Int) {
+        val corps = JSONArray()
+        textes.forEachIndexed { n, t -> corps.put(JSONObject().put("item_id", idCourses).put("texte", t).put("ordre", ordreDepart + n)) }
+        requete("POST", "/rest/v1/checklist", corps.toString(), jeton(ctx), "return=minimal")
+    }
+
+    fun cocherArticle(ctx: Context, id: String, coche: Boolean) {
+        requete("PATCH", "/rest/v1/checklist?id=eq.$id", JSONObject().put("coche", coche).toString(), jeton(ctx), "return=minimal")
+    }
+
+    /** Efface un article acheté (seulement s'il est toujours coché). */
+    fun effacerArticle(ctx: Context, id: String) {
+        requete("DELETE", "/rest/v1/checklist?id=eq.$id&coche=is.true", null, jeton(ctx), "return=minimal")
+    }
+
     private fun journal(jeton: String, id: String, action: String, avant: JSONObject?, apres: JSONObject) {
         val corps = JSONObject().put("item_id", id).put("action", action).put("par", "appli").put("apres", apres)
         if (avant != null) corps.put("avant", avant)
@@ -248,5 +292,7 @@ object Cache {
         p(ctx).edit().putString("liste", json).putLong("le", System.currentTimeMillis()).apply()
     fun lire(ctx: Context): String? = p(ctx).getString("liste", null)
     fun date(ctx: Context): Long = p(ctx).getLong("le", 0)
+    fun ecrireCourses(ctx: Context, n: Int) = p(ctx).edit().putInt("courses", n).apply()
+    fun courses(ctx: Context): Int = p(ctx).getInt("courses", -1)
     fun vider(ctx: Context) = p(ctx).edit().clear().apply()
 }
