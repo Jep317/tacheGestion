@@ -372,3 +372,7 @@ body.glisse-en-cours, body.glisse-en-cours * { cursor: grabbing !important; -web
 .choix-cat select { flex: 1 1 0; min-width: 0; width: 100%; text-overflow: ellipsis; }
 .choix-cat .champ-projet { flex: 1 1 0; }
 .ligne-planif select { min-width: 0; max-width: 100%; }
+
+/* Confirmation (terminer une tâche) */
+.fenetre.confirmer { max-width: 340px; }
+.texte-confirmer { margin: 8px 0 0; overflow-wrap: anywhere; color: var(--discret); }
