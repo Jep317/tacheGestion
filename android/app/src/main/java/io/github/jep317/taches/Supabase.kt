@@ -30,6 +30,11 @@ object Supabase {
         val theme: String?,
         val projet: String?,
         val echeance: String?,
+        val parent: String? = null,      // titre de la tâche parente (sous-tâche ou note attachée)
+        val sousFaites: Int = 0,         // sous-tâches faites / total : « 2/5 »
+        val sousTotal: Int = 0,
+        val checkCochees: Int = 0,       // lignes de checklist cochées / total : « ☑ 2/4 »
+        val checkTotal: Int = 0,
         val prioriteJour: String? = null,   // date (AAAA-MM-JJ) où Claude l'a choisie parmi les priorités du jour
         val prioriteRang: Int = 0,
     ) {
@@ -137,9 +142,46 @@ object Supabase {
 
     // ---------- données ----------
     fun lireListe(ctx: Context): List<Item> {
-        val chemin = "/rest/v1/items?select=id,texte_brut,titre,details,type,categorie:categories(nom),horizon,etat,theme,projet,echeance,priorite_jour,priorite_rang" +
+        val j = jeton(ctx)
+        val chemin = "/rest/v1/items?select=id,texte_brut,titre,details,type,categorie:categories(nom),horizon,etat,theme,projet,echeance,parent_id,priorite_jour,priorite_rang" +
             "&etat=in.(a_trier,a_faire,en_cours)&order=ordre.asc.nullslast,cree_le.asc"
-        val texte = requete("GET", chemin, null, jeton(ctx))
+        val liste = JSONArray(requete("GET", chemin, null, j))
+        // Sous-tâches (faites comprises) et checklists, pour afficher « 2/5 » et « ☑ 2/4 ».
+        val liens = JSONArray(requete("GET", "/rest/v1/items?select=id,parent_id,etat,type,titre,texte_brut&parent_id=not.is.null", null, j))
+        val lignes = JSONArray(requete("GET", "/rest/v1/checklist?select=item_id,coche", null, j))
+        val faites = HashMap<String, Int>(); val total = HashMap<String, Int>()
+        for (n in 0 until liens.length()) {
+            val o = liens.getJSONObject(n)
+            if (o.optString("type") !in setOf("tache", "course") || o.optString("etat") == "abandonne") continue
+            val p = o.getString("parent_id")
+            total[p] = (total[p] ?: 0) + 1
+            if (o.optString("etat") == "fait") faites[p] = (faites[p] ?: 0) + 1
+        }
+        val cochees = HashMap<String, Int>(); val lignesTotal = HashMap<String, Int>()
+        for (n in 0 until lignes.length()) {
+            val o = lignes.getJSONObject(n)
+            val id = o.getString("item_id")
+            lignesTotal[id] = (lignesTotal[id] ?: 0) + 1
+            if (o.optBoolean("coche")) cochees[id] = (cochees[id] ?: 0) + 1
+        }
+        // Titre des parents : dans la liste, ou parmi les éléments déjà faits (requête courte si besoin).
+        val titres = HashMap<String, String>()
+        fun titreDe(o: JSONObject) = o.optString("titre").takeIf { !o.isNull("titre") && it.isNotBlank() } ?: o.optString("texte_brut")
+        for (n in 0 until liste.length()) liste.getJSONObject(n).let { titres[it.getString("id")] = titreDe(it) }
+        val manquants = (0 until liste.length()).mapNotNull { liste.getJSONObject(it).let { o -> if (o.isNull("parent_id")) null else o.getString("parent_id") } }
+            .filter { it !in titres }.distinct()
+        if (manquants.isNotEmpty()) {
+            val p = JSONArray(requete("GET", "/rest/v1/items?select=id,titre,texte_brut&id=in.(${manquants.joinToString(",")})", null, j))
+            for (n in 0 until p.length()) p.getJSONObject(n).let { titres[it.getString("id")] = titreDe(it) }
+        }
+        for (n in 0 until liste.length()) {
+            val o = liste.getJSONObject(n)
+            val id = o.getString("id")
+            if (!o.isNull("parent_id")) titres[o.getString("parent_id")]?.let { o.put("_parent", it) }
+            o.put("_sous_faites", faites[id] ?: 0).put("_sous_total", total[id] ?: 0)
+            o.put("_check_cochees", cochees[id] ?: 0).put("_check_total", lignesTotal[id] ?: 0)
+        }
+        val texte = liste.toString()
         Cache.ecrire(ctx, texte)
         return analyser(texte)
     }
@@ -161,6 +203,11 @@ object Supabase {
                 theme = o.chaine("theme"),
                 projet = o.chaine("projet"),
                 echeance = o.chaine("echeance"),
+                parent = o.chaine("_parent"),
+                sousFaites = o.optInt("_sous_faites"),
+                sousTotal = o.optInt("_sous_total"),
+                checkCochees = o.optInt("_check_cochees"),
+                checkTotal = o.optInt("_check_total"),
                 prioriteJour = o.chaine("priorite_jour"),
                 prioriteRang = o.optInt("priorite_rang", 0),
             )

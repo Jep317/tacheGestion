@@ -227,3 +227,36 @@ body.panneau .connexion { padding-right: 44px; }
 body.verrouille .btn-verrou::before { content: "🔒"; }
 body.verrouille .btn-verrou { border-color: var(--accent); }
 body.panneau:has(.btn-verrou) .entete { padding-right: 76px; }
+
+/* Sous-tâches : l'arbre sous la tâche parent, relié par un trait */
+.items > .branche { margin: -2px 0 0 18px; padding-left: 12px; border-left: 2px solid var(--ligne); list-style: none; }
+.items > .branche > .items { margin-top: 0; }
+.item.sous-tache { padding: 8px 10px; }
+.item.sous-tache .case { width: 19px; height: 19px; }
+.item .meta .contexte { color: var(--accent); }
+.tag.arbre, .tag.lie { background: none; font: inherit; color: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+.tag.lie { color: var(--accent); border-color: currentColor; }
+.tag.arbre .barre { display: inline-block; width: 36px; height: 5px; border-radius: 3px; background: var(--ligne); overflow: hidden; }
+.tag.arbre .barre i { display: block; height: 100%; background: var(--accent); }
+.item.eclaire { outline: 2px solid var(--accent); transition: outline-color .6s; }
+
+/* Fiche : blocs checklist, notes attachées, ajouts rapides */
+.details .bloc { margin: 8px 0; white-space: normal; }
+.bloc-titre { font-weight: 600; color: var(--texte); font-size: 13px; margin-bottom: 2px; }
+.bloc-titre .compte { color: var(--discret); font-weight: 400; }
+.mini-ajout { display: flex; gap: 6px; margin: 6px 0; align-items: center; }
+.mini-ajout input, .mini-ajout textarea { padding: 6px 10px; font-size: 14px; border-radius: 8px; resize: none; }
+.mini { flex: none; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--ligne); background: var(--carte); color: var(--discret); padding: 0; font-size: 14px; line-height: 1; }
+.mini:hover { color: var(--texte); border-color: var(--discret); }
+.checklist .lignes { list-style: none; margin: 4px 0; padding: 0; display: grid; gap: 2px; }
+.checklist .lignes li { display: flex; align-items: center; gap: 6px; }
+.checklist .lignes label { flex: 1; display: flex; align-items: center; gap: 8px; color: var(--texte); cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.checklist .lignes input { width: 18px; height: 18px; accent-color: var(--accent); flex: none; margin: 0; }
+.checklist .lignes li.coche .check-texte { text-decoration: line-through; color: var(--discret); }
+.checklist .lignes .mini { width: 26px; height: 26px; font-size: 12px; opacity: .7; }
+.note-liee { border-left: 3px solid var(--accent); padding: 2px 8px; margin: 4px 0; color: var(--texte); white-space: pre-wrap; }
+.note-liee div { color: var(--discret); }
+.lien.petit { font-size: 13px; padding: 2px 0; }
+.choix-cat { flex-wrap: wrap; max-width: 100%; }
+.choix-cat > span { white-space: nowrap; }
+.choix-cat select { max-width: 100%; }

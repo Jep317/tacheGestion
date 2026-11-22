@@ -38,3 +38,12 @@ Choisis les 3 priorités du jour parmi les tâches et courses `a_faire`/`en_cour
 
 ## Revue de la semaine (dimanche, passage de 18h47)
 Ne modifie aucune tâche : écris des propositions dans `propositions` (action `reporter`, `abandonner` ou `planifier`, `changements` = `{"horizon": …}` et/ou `{"echeance": "AAAA-MM-JJ"}`, `raison` courte). Jérémie les accepte ou refuse dans l'appli ; l'acceptation passe par la fonction `repondre_proposition(id, accepter)`, qui applique le changement et journalise. S'il répond dans la conversation (« accepte tout sauf la 3 »), appelle cette même fonction. Les propositions sans réponse passent en `expiree` à la revue suivante.
+
+## Sous-tâches, notes attachées, checklists
+- `items.parent_id` relie une sous-tâche à sa tâche parente (3 niveaux au plus, la base refuse au-delà et refuse les boucles). Une note ou idée avec un `parent_id` est une note attachée à cette tâche.
+- Rattachement : si un nouvel élément est clairement une étape d'une tâche existante non terminée (ou une note qui la concerne), mets `parent_id` sur cette tâche et reprends sa `categorie_id` et son `projet`. Seulement quand c'est évident.
+- Les sous-tâches ajoutées depuis l'appli arrivent déjà en `a_faire` avec un titre et `trie_le` vide : vérifie l'horizon et le titre, puis mets `trie_le`.
+- Une sous-tâche garde son propre horizon ; l'`ordre` sert aussi d'ordre entre sœurs sous le parent.
+- Ne fusionne jamais une sous-tâche avec son parent. Ne clos jamais un parent toi-même parce que ses sous-tâches sont faites : signale-le dans le résumé.
+- Priorités du jour : préfère la sous-tâche concrète à la tâche parent.
+- Table `checklist` (lignes à cocher d'une tâche, et la liste de courses) : n'y touche pas.

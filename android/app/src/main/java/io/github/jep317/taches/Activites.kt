@@ -43,6 +43,9 @@ private fun ouvrirAppliWeb(ctx: Context, parametres: String = "") {
 object Details {
     fun meta(i: Supabase.Item): String {
         val m = mutableListOf<String>()
+        i.parent?.let { m += "↳ $it" }
+        if (i.sousTotal > 0) m += "▾ ${i.sousFaites}/${i.sousTotal}"
+        if (i.checkTotal > 0) m += "☑ ${i.checkCochees}/${i.checkTotal}"
         i.categorie?.let { m += it }
         if (i.type == "course") m += "Course"
         if (i.type == "idee") m += "Idée"
