@@ -43,7 +43,7 @@ class WidgetTaches : AppWidgetProvider() {
 
     override fun onDeleted(ctx: Context, ids: IntArray) {
         val e = ctx.getSharedPreferences("widget", Context.MODE_PRIVATE).edit()
-        for (id in ids) e.remove("onglet_$id")
+        for (id in ids) e.remove("onglet_$id").remove("cat_$id").remove("proj_$id")
         e.apply()
     }
 
@@ -56,6 +56,21 @@ class WidgetTaches : AppWidgetProvider() {
         /** Onglet affiché par un widget posé : « taches » ou « notes ». */
         fun onglet(ctx: Context, id: Int): String =
             ctx.getSharedPreferences("widget", Context.MODE_PRIVATE).getString("onglet_$id", TACHES) ?: TACHES
+
+        /** Filtre d'un widget : catégorie (nom, ou "" = sans catégorie) et projet ; null = pas de filtre. */
+        fun filtreCategorie(ctx: Context, id: Int): String? =
+            ctx.getSharedPreferences("widget", Context.MODE_PRIVATE).getString("cat_$id", null)
+        fun filtreProjet(ctx: Context, id: Int): String? =
+            ctx.getSharedPreferences("widget", Context.MODE_PRIVATE).getString("proj_$id", null)
+        fun choisirFiltre(ctx: Context, id: Int, categorie: String?, projet: String?) {
+            val e = ctx.getSharedPreferences("widget", Context.MODE_PRIVATE).edit()
+            if (categorie == null) e.remove("cat_$id") else e.putString("cat_$id", categorie)
+            if (projet == null) e.remove("proj_$id") else e.putString("proj_$id", projet)
+            e.commit()
+            val g = AppWidgetManager.getInstance(ctx)
+            g.updateAppWidget(id, vues(ctx, id))
+            g.notifyAppWidgetViewDataChanged(intArrayOf(id), R.id.liste)
+        }
 
         private fun choisirOnglet(ctx: Context, id: Int, onglet: String) =
             ctx.getSharedPreferences("widget", Context.MODE_PRIVATE).edit().putString("onglet_$id", onglet).commit()
@@ -118,6 +133,14 @@ class WidgetTaches : AppWidgetProvider() {
             v.setTextColor(R.id.onglet_notes, if (notes) actif else inactif)
             v.setOnClickPendingIntent(R.id.onglet_taches, versOnglet(ctx, id, TACHES))
             v.setOnClickPendingIntent(R.id.onglet_notes, versOnglet(ctx, id, NOTES))
+
+            val cat = filtreCategorie(ctx, id)
+            val proj = filtreProjet(ctx, id)
+            val morceaux = listOfNotNull(cat?.let { if (it.isEmpty()) "Sans catégorie" else it }, proj)
+            v.setTextViewText(R.id.filtre, if (morceaux.isEmpty()) "Filtrer : tout ▾" else "Filtre : " + morceaux.joinToString(" · ") + " ▾")
+            val filtre = Intent(ctx, FiltreActivity::class.java).putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+            filtre.data = Uri.parse("taches://filtre/$id")
+            v.setOnClickPendingIntent(R.id.filtre, activite(ctx, 0, filtre))
             v.setOnClickPendingIntent(R.id.vide, activite(ctx, 2, Intent(ctx, MainActivity::class.java)))
             v.setOnClickPendingIntent(R.id.btn_ajouter, activite(ctx, 3, Intent(ctx, AjoutActivity::class.java)))
             v.setOnClickPendingIntent(
@@ -186,7 +209,17 @@ class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteView
             }
             Supabase.analyser(cache)
         }
-        lignes = if (WidgetTaches.onglet(ctx, widgetId) == WidgetTaches.NOTES) construireNotes(items) else construire(items)
+        // Filtre catégorie / projet du widget, comme les pastilles de l'appli web.
+        val cat = WidgetTaches.filtreCategorie(ctx, widgetId)
+        val proj = WidgetTaches.filtreProjet(ctx, widgetId)
+        val filtres = items.filter { i ->
+            (cat == null || (if (cat.isEmpty()) i.categorie == null && i.etat != "a_trier" else i.categorie == cat)) &&
+                (proj == null || i.projet == proj)
+        }
+        lignes = if (WidgetTaches.onglet(ctx, widgetId) == WidgetTaches.NOTES) construireNotes(filtres) else construire(filtres)
+        if (lignes.isEmpty() || (cat != null || proj != null) && filtres.isEmpty()) {
+            lignes = listOf(Ligne.Info("Rien avec ce filtre. Touche « Filtre » en haut pour tout voir."))
+        }
     }
 
     /** Onglet Notes : notes et idées rangées par projet, comme l'onglet Notes de l'appli. */

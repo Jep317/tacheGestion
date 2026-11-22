@@ -53,6 +53,13 @@
             android:windowSoftInputMode="adjustResize|stateVisible" />
 
         <activity
+            android:name=".FiltreActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity=".filtre"
+            android:theme="@style/Theme.Taches.Transparent" />
+
+        <activity
             android:name=".DetailActivity"
             android:excludeFromRecents="true"
             android:exported="false"
