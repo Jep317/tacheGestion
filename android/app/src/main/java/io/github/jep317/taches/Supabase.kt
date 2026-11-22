@@ -28,7 +28,8 @@ object Supabase {
         val horizon: String?,
         val etat: String,
         val theme: String?,
-        val projet: String?,
+        val projet: String?,             // affiché « Sujet »
+        val groupe: String? = null,      // groupe à l'intérieur du sujet
         val echeance: String?,
         val echeanceHeure: String? = null,
         val recurrent: Boolean = false,
@@ -145,7 +146,7 @@ object Supabase {
     // ---------- données ----------
     fun lireListe(ctx: Context): List<Item> {
         val j = jeton(ctx)
-        val chemin = "/rest/v1/items?select=id,texte_brut,titre,details,type,categorie:categories(nom),horizon,etat,theme,projet,echeance,echeance_heure,recurrence,parent_id,priorite_jour,priorite_rang" +
+        val chemin = "/rest/v1/items?select=id,texte_brut,titre,details,type,categorie:categories(nom),horizon,etat,theme,projet,groupe,echeance,echeance_heure,recurrence,parent_id,priorite_jour,priorite_rang" +
             "&etat=in.(a_trier,a_faire,en_cours)&special=is.null&order=ordre.asc.nullslast,cree_le.asc"
         val liste = JSONArray(requete("GET", chemin, null, j))
         // Sous-tâches (faites comprises) et checklists, pour afficher « 2/5 » et « ☑ 2/4 ».
@@ -212,6 +213,7 @@ object Supabase {
                 etat = o.optString("etat", "a_trier"),
                 theme = o.chaine("theme"),
                 projet = o.chaine("projet"),
+                groupe = o.chaine("groupe"),
                 echeance = o.chaine("echeance"),
                 echeanceHeure = o.chaine("echeance_heure"),
                 recurrent = o.has("recurrence") && !o.isNull("recurrence"),

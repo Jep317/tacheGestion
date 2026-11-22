@@ -77,6 +77,10 @@ input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 
 .groupe-projet[open] > summary { background: none; border-color: transparent; padding-left: 4px; }
 .groupe-projet .compte { color: var(--discret); font-weight: 400; font-size: 14px; margin-left: auto; }
 .groupe-projet > .items { margin: 2px 0 12px; }
+/* Groupe à l'intérieur d'un sujet (sujet › groupe › notes) */
+.groupe-projet.sous-groupe { margin: 4px 0 4px 14px; }
+.groupe-projet.sous-groupe > summary { font-size: 15px; font-weight: 500; padding: 8px 10px; }
+.groupe-projet.sous-groupe > .items { margin: 2px 0 8px; }
 #filtres .regler { color: var(--discret); padding: 6px 10px; }
 .onglets button[aria-selected="true"], .espaces button[aria-pressed="true"] { background: var(--accent); color: var(--accent-texte); font-weight: 600; }
 
