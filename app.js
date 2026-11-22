@@ -29,6 +29,10 @@ const etat = {
   recherche: '',
   ouverts: new Set(),        // éléments dont on affiche le détail
   sections: BUREAU ? {} : JSON.parse(lire('sections') || '{}'),
+  liens: [],                 // tous les enfants (faits compris) : { id, parent_id, etat, type }, pour la progression « 2/5 »
+  horsListe: new Map(),      // parents déjà faits, pour afficher « ↳ Garage » sous un enfant encore ouvert
+  checklist: new Map(),      // item_id -> lignes de checklist triées
+  replies: new Set(JSON.parse(lire('replies') || '[]')), // tâches dont on a replié les sous-tâches
 };
 
 // ---------- utilitaires ----------
@@ -72,6 +76,7 @@ function afficherSelonSession(session) {
     abonnement = sb.channel('items')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'items' }, charger)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, charger)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'checklist' }, charger)
       .subscribe();
     actionsDeLancement();
   } else if (!connecte && abonnement) {
@@ -111,18 +116,34 @@ function traduireErreur(err) {
 
 // ---------- données ----------
 async function charger() {
-  const [items, cats] = await Promise.all([
+  const [items, cats, liens, lignes] = await Promise.all([
     sb.from('items')
-      .select('id, texte_brut, titre, details, type, categorie_id, horizon, etat, theme, projet, ordre, echeance, cree_le')
+      .select('id, texte_brut, titre, details, type, categorie_id, horizon, etat, theme, projet, ordre, echeance, cree_le, parent_id')
       .in('etat', ['a_trier', 'a_faire', 'en_cours'])
       .order('ordre', { ascending: true, nullsFirst: false })
       .order('cree_le', { ascending: true }),
     sb.from('categories').select('id, nom, ordre').order('ordre').order('nom'),
+    sb.from('items').select('id, parent_id, etat, type').not('parent_id', 'is', null),
+    sb.from('checklist').select('id, item_id, texte, coche, ordre, cree_le').order('ordre').order('cree_le'),
   ]);
-  const error = items.error || cats.error;
+  const error = items.error || cats.error || liens.error || lignes.error;
   if (error) { toast('Impossible de charger la liste : ' + error.message); return; }
   etat.items = items.data;
   etat.categories = cats.data;
+  etat.liens = liens.data;
+  etat.checklist = new Map();
+  for (const l of lignes.data) {
+    if (!etat.checklist.has(l.item_id)) etat.checklist.set(l.item_id, []);
+    etat.checklist.get(l.item_id).push(l);
+  }
+  // Parents déjà faits (ou abandonnés) d'éléments encore ouverts : juste leur titre.
+  const actifs = new Set(etat.items.map((i) => i.id));
+  const manquants = [...new Set(etat.items.map((i) => i.parent_id).filter((p) => p && !actifs.has(p)))];
+  etat.horsListe = new Map();
+  if (manquants.length) {
+    const { data } = await sb.from('items').select('id, titre, texte_brut, parent_id, etat, type').in('id', manquants);
+    for (const p of data || []) etat.horsListe.set(p.id, p);
+  }
   if (etat.filtre !== 'tout' && etat.filtre !== 'aucune' && !categorie(etat.filtre)) etat.filtre = 'tout';
   afficherFiltres();
   afficher();
@@ -140,7 +161,7 @@ async function ajouter(texte, source) {
   return true;
 }
 
-async function changerEtat(item, nouvelEtat) {
+async function changerEtat(item, nouvelEtat, { recharger = true } = {}) {
   const avant = { etat: item.etat };
   const maj = { etat: nouvelEtat, fait_le: nouvelEtat === 'fait' ? new Date().toISOString() : null };
   const { error } = await sb.from('items').update(maj).eq('id', item.id);
@@ -148,7 +169,7 @@ async function changerEtat(item, nouvelEtat) {
   await sb.from('journal').insert({
     item_id: item.id, action: nouvelEtat === 'fait' ? 'termine' : 'modifie', avant, apres: maj, par: 'appli',
   });
-  charger();
+  if (recharger) charger();
 }
 
 async function changerCategorie(item, categorieId) {
@@ -158,6 +179,217 @@ async function changerCategorie(item, categorieId) {
   if (error) { toast('Modification impossible : ' + error.message); return; }
   await sb.from('journal').insert({ item_id: item.id, action: 'modifie', avant, apres, par: 'appli' });
   charger();
+}
+
+// ---------- sous-tâches, notes attachées ----------
+const TYPES_TACHE = ['tache', 'course'];
+const NIVEAUX_MAX = 3; // une tâche, ses sous-tâches, et leurs sous-tâches
+function trouver(id) { return etat.items.find((i) => i.id === id) || etat.horsListe.get(id); }
+function libelle(i) { return i ? (i.titre || i.texte_brut) : ''; }
+function estTache(i) { return TYPES_TACHE.includes(i.type); }
+/** Sous-tâches encore ouvertes, dans l'ordre fixé par Claude. */
+function sousTaches(id) { return etat.items.filter((i) => i.parent_id === id && estTache(i)); }
+/** Notes et idées attachées à une tâche. */
+function notesDe(id) { return etat.items.filter((i) => i.parent_id === id && TYPES_NOTES.includes(i.type)); }
+/** Progression d'une tâche parent : sous-tâches faites / total (les abandonnées ne comptent pas). */
+function progression(id) {
+  const enfants = etat.liens.filter((l) => l.parent_id === id && TYPES_TACHE.includes(l.type) && l.etat !== 'abandonne');
+  return { faits: enfants.filter((l) => l.etat === 'fait').length, total: enfants.length };
+}
+/** Nombre d'ancêtres (0 pour une tâche principale). */
+function profondeur(i) {
+  let n = 0;
+  for (let p = i && trouver(i.parent_id); p && n < 5; p = trouver(p.parent_id)) n++;
+  return n;
+}
+/** Niveaux de sous-tâches sous une tâche (0 si elle n'en a pas). */
+function hauteur(id, n = 0) {
+  if (n > 5) return 0;
+  return Math.max(0, ...sousTaches(id).map((c) => 1 + hauteur(c.id, n + 1)));
+}
+function descendants(id) {
+  const res = [];
+  for (const c of sousTaches(id)) res.push(c, ...descendants(c.id));
+  return res;
+}
+const RANG = { maintenant: 0, bientot: 1, plus_tard: 2, un_jour: 3 };
+/** Une sous-tâche s'affiche aussi seule dans son horizon quand elle est plus urgente que son parent,
+ *  ou quand son parent n'est pas visible (fait, autre catégorie, autre projet). */
+function visibleSeule(i, visibles) {
+  if (!i.parent_id) return true;
+  const p = etat.items.find((x) => x.id === i.parent_id);
+  if (!p || !visibles.has(p.id) || p.etat === 'a_trier') return true;
+  return i.horizon && p.horizon && RANG[i.horizon] < RANG[p.horizon];
+}
+
+async function journal(item_id, action, avant, apres) {
+  await sb.from('journal').insert({ item_id, action, avant, apres, par: 'appli' });
+}
+
+/** Marque une tâche faite. Si elle a des sous-tâches ouvertes, propose de les clore aussi ;
+ *  si c'était la dernière sous-tâche ouverte de son parent, propose de clore le parent. */
+async function terminer(item) {
+  const ouverts = descendants(item.id);
+  if (ouverts.length && !confirm(`« ${libelle(item)} » a encore ${ouverts.length} sous-tâche(s) pas finie(s). Tout marquer comme fait ?`)) return;
+  const touches = [item, ...ouverts];
+  const anciens = touches.map((t) => [t, t.etat]);
+  await Promise.all(touches.map((t) => changerEtat(t, 'fait', { recharger: false })));
+  await charger();
+  const parent = etat.items.find((p) => p.id === item.parent_id);
+  if (parent && !sousTaches(parent.id).length) {
+    toast(`Toutes les sous-tâches de « ${libelle(parent)} » sont faites.`, { nom: 'Clore la tâche', faire: () => terminer(parent) });
+  } else {
+    toast('Fait : ' + libelle(item) + (ouverts.length ? ` (+ ${ouverts.length})` : ''), {
+      nom: 'Annuler',
+      faire: async () => { await Promise.all(anciens.map(([t, e]) => changerEtat({ ...t, etat: 'fait' }, e, { recharger: false }))); charger(); },
+    });
+  }
+}
+
+async function ajouterSousTache(parent, texte) {
+  texte = texte.trim();
+  if (!texte) return false;
+  if (profondeur(parent) + 1 >= NIVEAUX_MAX) { toast('Trois niveaux de sous-tâches au maximum.'); return false; }
+  const ligne = {
+    texte_brut: texte, titre: texte, type: 'tache', etat: 'a_faire', source: 'app', parent_id: parent.id,
+    horizon: parent.horizon || 'bientot', categorie_id: parent.categorie_id, projet: parent.projet,
+  };
+  const { data, error } = await sb.from('items').insert(ligne).select('id').single();
+  if (error) { toast('Ajout impossible : ' + error.message); return false; }
+  await journal(data.id, 'cree', null, ligne);
+  etat.replies.delete(parent.id);
+  ecrireReplies();
+  await charger();
+  return true;
+}
+
+async function attacherNote(parent, texte) {
+  texte = texte.trim();
+  if (!texte) return false;
+  const premiere = texte.split('\n')[0].trim();
+  const titre = premiere.length > 80 ? premiere.slice(0, 77) + '…' : premiere;
+  const ligne = {
+    texte_brut: texte, titre, details: texte === titre ? null : texte, type: 'note', etat: 'a_faire', source: 'app',
+    parent_id: parent.id, categorie_id: parent.categorie_id, projet: parent.projet,
+  };
+  const { data, error } = await sb.from('items').insert(ligne).select('id').single();
+  if (error) { toast('Ajout impossible : ' + error.message); return false; }
+  await journal(data.id, 'cree', null, ligne);
+  await charger();
+  return true;
+}
+
+async function changerParent(item, parentId) {
+  const avant = { parent_id: item.parent_id };
+  const apres = { parent_id: parentId || null };
+  const { error } = await sb.from('items').update(apres).eq('id', item.id);
+  if (error) { toast('Impossible : ' + error.message); charger(); return; }
+  await journal(item.id, 'modifie', avant, apres);
+  if (parentId) { etat.replies.delete(parentId); ecrireReplies(); }
+  charger();
+}
+
+/** Tâches auxquelles on peut rattacher cet élément sans dépasser 3 niveaux ni créer de boucle. */
+function parentsPossibles(item) {
+  const exclus = new Set([item.id, ...descendants(item.id).map((d) => d.id)]);
+  const h = estTache(item) ? hauteur(item.id) : -1;
+  return etat.items
+    .filter((p) => estTache(p) && p.etat !== 'a_trier' && !exclus.has(p.id) && profondeur(p) + 1 + h < NIVEAUX_MAX)
+    .sort((a, b) => libelle(a).localeCompare(libelle(b), 'fr'));
+}
+
+function ecrireReplies() { ecrire('replies', JSON.stringify([...etat.replies])); }
+
+/** Va à une tâche (depuis une note attachée) : onglet Liste, branches dépliées, fiche ouverte. */
+function allerA(id) {
+  const cible = etat.items.find((i) => i.id === id);
+  if (!cible) { toast('Cette tâche est déjà faite.'); return; }
+  for (let p = trouver(cible.parent_id); p; p = trouver(p.parent_id)) etat.replies.delete(p.id);
+  ecrireReplies();
+  etat.ouverts.add(id);
+  if (etat.projet && cleProjet(cible.projet) !== etat.projet) { etat.projet = ''; ecrire('projet', ''); }
+  if (!filtreCategorie(cible)) { etat.filtre = 'tout'; ecrire('filtre', 'tout'); afficherFiltres(); }
+  document.querySelector('[data-vue="liste"]').click();
+  const el = document.querySelector(`#vue-liste [data-id="${id}"]`);
+  if (el) {
+    el.closest('details')?.setAttribute('open', '');
+    el.scrollIntoView({ block: 'center' });
+    el.classList.add('eclaire');
+    setTimeout(() => el.classList.remove('eclaire'), 1500);
+  }
+}
+
+// ---------- checklist (réutilisable : table checklist, une ligne = { id, item_id, texte, coche, ordre }) ----------
+function lignesChecklist(itemId) { return etat.checklist.get(itemId) || []; }
+
+/** Découpe un texte collé ou dicté en lignes : une par retour à la ligne, point-virgule ou virgule. */
+function decouperLignes(texte) {
+  return texte.split(/[\n;,]+/).map((t) => t.trim()).filter(Boolean).map((t) => t.slice(0, 200));
+}
+
+async function ajouterLignesChecklist(itemId, texte) {
+  const textes = decouperLignes(texte);
+  if (!textes.length) return false;
+  const depart = Math.max(0, ...lignesChecklist(itemId).map((l) => l.ordre)) + 1;
+  const { error } = await sb.from('checklist').insert(textes.map((t, n) => ({ item_id: itemId, texte: t, ordre: depart + n })));
+  if (error) { toast('Ajout impossible : ' + error.message); return false; }
+  await charger();
+  return true;
+}
+
+async function cocherLigne(ligneId, coche) {
+  for (const lignes of etat.checklist.values()) {
+    const l = lignes.find((x) => x.id === ligneId);
+    if (l) l.coche = coche;
+  }
+  afficher(); // tout de suite, sans attendre le serveur
+  const { error } = await sb.from('checklist').update({ coche }).eq('id', ligneId);
+  if (error) { toast('Modification impossible : ' + error.message); charger(); }
+}
+
+async function supprimerLigne(ligneId) {
+  const { error } = await sb.from('checklist').delete().eq('id', ligneId);
+  if (error) toast('Suppression impossible : ' + error.message);
+  charger();
+}
+
+async function supprimerLignesCochees(itemId) {
+  const { error } = await sb.from('checklist').delete().eq('item_id', itemId).eq('coche', true);
+  if (error) toast('Suppression impossible : ' + error.message);
+  charger();
+}
+
+/** Transforme une ligne de checklist en vraie sous-tâche. */
+async function promouvoirLigne(ligneId) {
+  let ligne;
+  for (const lignes of etat.checklist.values()) ligne = ligne || lignes.find((x) => x.id === ligneId);
+  const parent = ligne && etat.items.find((i) => i.id === ligne.item_id);
+  if (!parent) return;
+  if (profondeur(parent) + 1 >= NIVEAUX_MAX) { toast('Trois niveaux de sous-tâches au maximum.'); return; }
+  if (await ajouterSousTache(parent, ligne.texte)) {
+    await sb.from('checklist').delete().eq('id', ligneId);
+    toast('« ' + ligne.texte + ' » est devenue une sous-tâche.');
+    charger();
+  }
+}
+
+/** HTML de la checklist d'un élément, avec ajout rapide (plusieurs lignes d'un coup). */
+function afficherChecklist(itemId) {
+  const lignes = lignesChecklist(itemId);
+  const promouvable = (() => { const i = etat.items.find((x) => x.id === itemId); return i && estTache(i) && profondeur(i) + 1 < NIVEAUX_MAX; })();
+  return `<div class="bloc checklist">
+    <div class="bloc-titre">Checklist${lignes.length ? ` <span class="compte">${lignes.filter((l) => l.coche).length}/${lignes.length}</span>` : ''}</div>
+    ${lignes.length ? `<ul class="lignes">${lignes.map((l) => `<li class="${l.coche ? 'coche' : ''}">
+      <label><input type="checkbox" data-check-coche="${l.id}" ${l.coche ? 'checked' : ''}><span class="check-texte" data-check-texte="${l.id}">${echap(l.texte)}</span></label>
+      ${promouvable ? `<button type="button" class="mini" data-check-promouvoir="${l.id}" title="En faire une sous-tâche (ou appui long sur la ligne)" aria-label="En faire une sous-tâche">⤴</button>` : ''}
+      <button type="button" class="mini" data-check-suppr="${l.id}" title="Supprimer" aria-label="Supprimer">✕</button>
+    </li>`).join('')}</ul>` : ''}
+    <form class="mini-ajout" data-ajout-check="${itemId}">
+      <input data-garder="check-${itemId}" placeholder="Ajouter des lignes (séparées par des virgules)" autocomplete="off" enterkeyhint="done">
+      <button type="submit" class="mini" aria-label="Ajouter">＋</button>
+    </form>
+    ${lignes.some((l) => l.coche) ? `<button type="button" class="lien petit" data-check-vider="${itemId}">Retirer les lignes cochées</button>` : ''}
+  </div>`;
 }
 
 // ---------- catégories ----------
@@ -302,26 +534,65 @@ function choisirProjet(p) {
   afficher();
 }
 
-function carte(i, { cocher = true } = {}) {
+function carte(i, { cocher = true, niveau = 0, contexte = false } = {}) {
   const brut = !i.titre;
-  const ouvert = etat.ouverts.has(i.id);
+  // Une sous-tâche peut apparaître deux fois (seule dans « Maintenant » et dans l'arbre) : chaque copie s'ouvre à part.
+  const cleOuvert = contexte && i.parent_id ? 'seule:' + i.id : i.id;
+  const ouvert = etat.ouverts.has(cleOuvert);
   const tags = [];
   const cat = categorie(i.categorie_id);
-  if (etat.filtre === 'tout' && cat) tags.push(`<span class="tag cat c${couleur(cat.id)}">${echap(cat.nom)}</span>`);
+  const parent = trouver(i.parent_id);
+  if (contexte && parent && estTache(i)) tags.push(`<span class="contexte">↳ ${echap(libelle(parent))}</span>`);
+  if (parent && !estTache(i)) tags.push(`<button type="button" class="tag lie" data-action="aller" data-id="${i.id}" title="Ouvrir la tâche">📎 ${echap(libelle(parent))}</button>`);
+  const prog = estTache(i) ? progression(i.id) : { total: 0 };
+  if (prog.total) {
+    const replie = etat.replies.has(i.id);
+    tags.push(`<button type="button" class="tag arbre" data-action="arbre" data-id="${i.id}" aria-expanded="${!replie}" title="${replie ? 'Déplier' : 'Replier'} les sous-tâches">
+      ${replie ? '▸' : '▾'} ${prog.faits}/${prog.total}<span class="barre"><i style="width:${Math.round((100 * prog.faits) / prog.total)}%"></i></span></button>`);
+  }
+  const lignes = lignesChecklist(i.id);
+  if (lignes.length) tags.push(`<span class="tag">☑ ${lignes.filter((l) => l.coche).length}/${lignes.length}</span>`);
+  const notes = notesDe(i.id);
+  if (notes.length) tags.push(`<span class="tag" title="Notes attachées">📎 ${notes.length}</span>`);
+  if (niveau === 0 && etat.filtre === 'tout' && cat) tags.push(`<span class="tag cat c${couleur(cat.id)}">${echap(cat.nom)}</span>`);
   if (i.type === 'course') tags.push('<span class="tag">Course</span>');
   if (i.type === 'idee') tags.push('<span class="tag">Idée</span>');
   if (i.etat === 'en_cours') tags.push('<span class="tag">En cours</span>');
   if (i.echeance) tags.push(`<span class="tag echeance">${dateCourte(i.echeance)}</span>`);
-  if (i.theme) tags.push(`<span>${echap(i.theme)}</span>`);
-  if (i.projet && !etat.projet && etat.vue !== 'notes') tags.push(`<span>· ${echap(i.projet)}</span>`);
+  if (niveau === 0 && i.theme) tags.push(`<span>${echap(i.theme)}</span>`);
+  if (niveau === 0 && i.projet && !etat.projet && etat.vue !== 'notes') tags.push(`<span>· ${echap(i.projet)}</span>`);
 
   let detail = '';
   if (ouvert) {
     const morceaux = [];
     if (i.details) morceaux.push(`<p>${echap(i.details)}</p>`);
-    if (!brut) morceaux.push(`<p>« ${echap(i.texte_brut)} »</p>`);
+    if (!brut && i.texte_brut !== i.titre) morceaux.push(`<p>« ${echap(i.texte_brut)} »</p>`);
     if (cocher && i.etat !== 'en_cours') morceaux.push(`<p><button class="lien" data-action="en_cours" data-id="${i.id}">Marquer en cours</button></p>`);
-    if (etat.categories.length) {
+    if (estTache(i) && i.etat !== 'a_trier') {
+      if (profondeur(i) + 1 < NIVEAUX_MAX) {
+        morceaux.push(`<form class="mini-ajout" data-ajout-sous="${i.id}">
+          <input data-garder="sous-${i.id}" placeholder="＋ Ajouter une sous-tâche" autocomplete="off" enterkeyhint="done">
+          <button type="submit" class="mini" aria-label="Ajouter la sous-tâche">＋</button></form>`);
+      }
+      morceaux.push(afficherChecklist(i.id));
+      morceaux.push(`<div class="bloc">
+        <div class="bloc-titre">Notes attachées${notes.length ? ` <span class="compte">${notes.length}</span>` : ''}</div>
+        ${notes.map((n) => `<div class="note-liee"><strong>${echap(libelle(n))}</strong>${n.details && n.details !== n.titre ? `<div>${echap(n.details)}</div>` : ''}</div>`).join('')}
+        <form class="mini-ajout" data-ajout-note="${i.id}">
+          <textarea rows="1" data-garder="note-${i.id}" placeholder="📎 Ajouter une note"></textarea>
+          <button type="submit" class="mini" aria-label="Attacher la note">＋</button></form>
+      </div>`);
+    }
+    if (i.etat !== 'a_trier') {
+      const possibles = parentsPossibles(i);
+      if (possibles.length || i.parent_id) {
+        const options = [`<option value="">${estTache(i) ? 'Aucune (tâche principale)' : 'Aucune'}</option>`]
+          .concat(possibles.map((p) => `<option value="${p.id}" ${p.id === i.parent_id ? 'selected' : ''}>${'  '.repeat(profondeur(p))}${echap(libelle(p))}</option>`));
+        if (i.parent_id && !possibles.some((p) => p.id === i.parent_id)) options.push(`<option value="${i.parent_id}" selected>${echap(libelle(parent))}</option>`);
+        morceaux.push(`<p><label class="choix-cat"><span>${estTache(i) ? 'Sous-tâche de' : 'Attachée à'}</span> <select data-parent-de="${i.id}">${options.join('')}</select></label></p>`);
+      }
+    }
+    if (etat.categories.length && niveau === 0) {
       const options = [`<option value="">${i.etat === 'a_trier' ? 'Laisser Claude choisir' : 'Sans catégorie'}</option>`]
         .concat(etat.categories.map((c) => `<option value="${c.id}" ${c.id === i.categorie_id ? 'selected' : ''}>${echap(c.nom)}</option>`));
       morceaux.push(`<p><label class="choix-cat">Catégorie <select data-categorie-de="${i.id}">${options.join('')}</select></label></p>`);
@@ -329,21 +600,27 @@ function carte(i, { cocher = true } = {}) {
     detail = `<div class="details">${morceaux.join('') || '<p>Rien de plus.</p>'}</div>`;
   }
 
-  return `<li class="item${brut ? ' brut' : ''}" data-id="${i.id}">
+  let html = `<li class="item${brut ? ' brut' : ''}${niveau ? ' sous-tache' : ''}" data-id="${i.id}">
     ${cocher ? `<button class="case" data-action="fait" data-id="${i.id}" aria-label="Marquer comme fait" title="Fait"></button>` : '<span></span>'}
-    <div class="corps" data-action="ouvrir" data-id="${i.id}">
-      <div class="titre">${echap(i.titre || i.texte_brut)}</div>
+    <div class="corps" data-action="ouvrir" data-id="${i.id}" data-ouvrir="${cleOuvert}">
+      <div class="titre">${echap(libelle(i))}</div>
       ${tags.length ? `<div class="meta">${tags.join('')}</div>` : ''}
     </div>
     ${detail}
   </li>`;
+  // L'arbre : les sous-tâches sous leur parent, reliées par un trait.
+  if (estTache(i) && !etat.replies.has(i.id) && niveau < NIVEAUX_MAX - 1) {
+    const enfants = sousTaches(i.id);
+    if (enfants.length) html += `<li class="branche"><ul class="items">${enfants.map((c) => carte(c, { cocher, niveau: niveau + 1 })).join('')}</ul></li>`;
+  }
+  return html;
 }
 
 function section(cle, nom, items, ouvertParDefaut, classe = '') {
   const ouvert = etat.sections[cle] ?? ouvertParDefaut;
   return `<details class="horizon ${classe}" data-section="${cle}" ${ouvert ? 'open' : ''}>
     <summary>${nom} <span class="compte">${items.length}</span></summary>
-    ${items.length ? `<ul class="items">${items.map((i) => carte(i)).join('')}</ul>` : '<div class="vide">Rien ici.</div>'}
+    ${items.length ? `<ul class="items">${items.map((i) => carte(i, { contexte: !!i.parent_id })).join('')}</ul>` : '<div class="vide">Rien ici.</div>'}
   </details>`;
 }
 
@@ -354,13 +631,15 @@ function afficher() {
   const aTrier = liste.filter((i) => i.etat === 'a_trier');
   let html = '';
   if (aTrier.length) html += section('a_trier', 'À trier', aTrier, true, 'a-trier');
+  const visibles = new Set(liste.map((i) => i.id));
   for (const h of HORIZONS) {
-    html += section(h.cle, h.nom, liste.filter((i) => i.etat !== 'a_trier' && i.horizon === h.cle && TYPES_LISTE.includes(i.type)), h.ouvert);
+    html += section(h.cle, h.nom, liste.filter((i) => i.etat !== 'a_trier' && i.horizon === h.cle && TYPES_LISTE.includes(i.type) && visibleSeule(i, visibles)), h.ouvert);
   }
   if (BUREAU) {
     const maintenant = new Date();
     html = `<div class="date-bureau">${maintenant.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</div>` + html;
   }
+  const garde = garderSaisies();
   $('#vue-liste').innerHTML = html;
 
   // Notes et idées
@@ -386,6 +665,19 @@ function afficher() {
         <ul class="items">${g.notes.map((i) => carte(i, { cocher: false })).join('')}</ul>`).join('');
   }
   $('#liste-notes').innerHTML = htmlNotes;
+  restaurerSaisies(garde);
+}
+
+// Le temps réel redessine tout : on garde ce qui est en cours de saisie dans les fiches ouvertes.
+function garderSaisies() {
+  const valeurs = new Map();
+  document.querySelectorAll('[data-garder]').forEach((c) => { if (c.value) valeurs.set(c.dataset.garder, c.value); });
+  const actif = document.activeElement?.dataset?.garder;
+  return { valeurs, actif };
+}
+function restaurerSaisies({ valeurs, actif }) {
+  for (const [cle, v] of valeurs) { const c = document.querySelector(`[data-garder="${cle}"]`); if (c) c.value = v; }
+  if (actif) document.querySelector(`[data-garder="${actif}"]`)?.focus();
 }
 
 // ---------- interactions ----------
@@ -396,12 +688,17 @@ document.addEventListener('click', (e) => {
   if (!item) return;
   const action = cible.dataset.action;
   if (action === 'ouvrir') {
-    etat.ouverts.has(item.id) ? etat.ouverts.delete(item.id) : etat.ouverts.add(item.id);
+    const cle = cible.dataset.ouvrir || item.id;
+    etat.ouverts.has(cle) ? etat.ouverts.delete(cle) : etat.ouverts.add(cle);
     afficher();
   } else if (action === 'fait') {
-    const ancien = item.etat;
-    changerEtat(item, 'fait');
-    toast('Fait : ' + (item.titre || item.texte_brut), { nom: 'Annuler', faire: () => changerEtat({ ...item, etat: 'fait' }, ancien) });
+    terminer(item);
+  } else if (action === 'arbre') {
+    etat.replies.has(item.id) ? etat.replies.delete(item.id) : etat.replies.add(item.id);
+    ecrireReplies();
+    afficher();
+  } else if (action === 'aller') {
+    allerA(item.parent_id);
   } else if (action === 'en_cours') {
     changerEtat(item, 'en_cours');
   }
@@ -436,7 +733,61 @@ $('#filtres').addEventListener('click', (e) => {
   else choisirFiltre(b.dataset.filtre);
 });
 
+// Fiche d'une tâche : sous-tâches, notes attachées, checklist.
+document.addEventListener('submit', async (e) => {
+  const f = e.target.closest('[data-ajout-sous], [data-ajout-note], [data-ajout-check]');
+  if (!f) return;
+  e.preventDefault();
+  const champ = f.querySelector('input, textarea');
+  const cle = champ.dataset.garder;
+  const id = f.dataset.ajoutSous || f.dataset.ajoutNote || f.dataset.ajoutCheck;
+  const item = etat.items.find((i) => i.id === id);
+  if (!item || !champ.value.trim()) return;
+  const texte = champ.value;
+  champ.value = '';
+  let ok;
+  if (f.dataset.ajoutSous) ok = await ajouterSousTache(item, texte);
+  else if (f.dataset.ajoutNote) ok = await attacherNote(item, texte);
+  else ok = await ajouterLignesChecklist(id, texte);
+  const c = document.querySelector(`[data-garder="${cle}"]`);
+  if (c) { if (!ok) c.value = texte; c.focus(); }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey && e.target.matches('[data-ajout-note] textarea')) { e.preventDefault(); e.target.form.requestSubmit(); }
+});
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-check-suppr], [data-check-promouvoir], [data-check-vider]');
+  if (!b) return;
+  if (b.dataset.checkSuppr) supprimerLigne(b.dataset.checkSuppr);
+  else if (b.dataset.checkPromouvoir) promouvoirLigne(b.dataset.checkPromouvoir);
+  else supprimerLignesCochees(b.dataset.checkVider);
+});
+// Appui long sur une ligne de checklist : en faire une sous-tâche.
+let appuiLong = null;
+document.addEventListener('pointerdown', (e) => {
+  const t = e.target.closest('[data-check-texte]');
+  if (!t) return;
+  appuiLong = setTimeout(() => { appuiLong = 'fait'; promouvoirLigne(t.dataset.checkTexte); }, 650);
+});
+['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => document.addEventListener(ev, () => {
+  if (appuiLong && appuiLong !== 'fait') clearTimeout(appuiLong);
+}, true));
+document.addEventListener('click', (e) => {
+  // Après un appui long, le relâchement ne doit pas cocher la ligne.
+  if (appuiLong === 'fait' && e.target.closest('.checklist label')) { e.preventDefault(); }
+  if (appuiLong === 'fait') appuiLong = null;
+}, true);
+document.addEventListener('contextmenu', (e) => { if (e.target.closest('[data-check-texte]')) e.preventDefault(); });
+
 document.addEventListener('change', (e) => {
+  const coche = e.target.closest('[data-check-coche]');
+  if (coche) { cocherLigne(coche.dataset.checkCoche, coche.checked); return; }
+  const par = e.target.closest('[data-parent-de]');
+  if (par) {
+    const item = etat.items.find((i) => i.id === par.dataset.parentDe);
+    if (item && (par.value || null) !== item.parent_id) changerParent(item, par.value);
+    return;
+  }
   const s = e.target.closest('[data-categorie-de]');
   if (!s) return;
   const item = etat.items.find((i) => i.id === s.dataset.categorieDe);
