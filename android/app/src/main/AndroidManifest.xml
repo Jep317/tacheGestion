@@ -71,7 +71,7 @@
             android:excludeFromRecents="true"
             android:exported="false"
             android:taskAffinity=".detail"
-            android:theme="@style/Theme.Taches.Fenetre" />
+            android:theme="@style/Theme.Taches.Fiche" />
 
         <receiver
             android:name=".WidgetTaches"
