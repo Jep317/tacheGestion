@@ -30,6 +30,7 @@
       <nav class="onglets" role="tablist">
         <button role="tab" data-vue="liste" aria-selected="true">Liste</button>
         <button role="tab" data-vue="notes" aria-selected="false">Notes</button>
+        <button role="tab" data-vue="courses" aria-selected="false">🛒 Courses</button>
       </nav>
       <div id="filtres" class="espaces" role="group" aria-label="Catégories"></div>
       <div id="projets" class="espaces projets" role="group" aria-label="Projets" hidden></div>
@@ -40,6 +41,10 @@
       <section id="vue-notes" hidden>
         <input id="recherche" type="search" placeholder="Rechercher dans les notes et idées">
         <div id="liste-notes"></div>
+      </section>
+      <section id="vue-courses" hidden>
+        <ul id="liste-courses" class="courses"></ul>
+        <div id="suggestions" class="suggestions" aria-label="Déjà achetés"></div>
       </section>
     </main>
 

@@ -46,4 +46,10 @@ Ne modifie aucune tâche : écris des propositions dans `propositions` (action `
 - Une sous-tâche garde son propre horizon ; l'`ordre` sert aussi d'ordre entre sœurs sous le parent.
 - Ne fusionne jamais une sous-tâche avec son parent. Ne clos jamais un parent toi-même parce que ses sous-tâches sont faites : signale-le dans le résumé.
 - Priorités du jour : préfère la sous-tâche concrète à la tâche parent.
-- Table `checklist` (lignes à cocher d'une tâche, et la liste de courses) : n'y touche pas.
+- Table `checklist` (lignes à cocher d'une tâche) : n'y touche pas, sauf pour ajouter des articles à la liste de courses (ci-dessous).
+
+## Liste de courses
+- C'est la ligne de `items` où `special = 'courses'` (« 🛒 Courses », toujours `en_cours`). La base refuse de la terminer, de la supprimer ou d'en faire une sous-tâche. Ses articles sont ses lignes de `checklist` ; les articles déjà achetés sont retenus dans `articles_courses` (suggestions, rempli automatiquement).
+- Ignore-la partout (tri, catégorie, projet, ordre, priorités du jour, revue de la semaine) : filtre `special is null`.
+- Courses dictées en vrac : si un élément `a_trier` n'est qu'une liste d'achats du quotidien (« acheter du lait », « plus de café », « des piles et du pain »), ne crée pas de tâche. Ajoute chaque article à la checklist de la liste de courses (nom court, majuscule initiale, sans « acheter » ni article : « Lait », « Piles AA » ; `ordre` = max + 1 ; pas de doublon d'un article non coché déjà présent, sans tenir compte de la casse). Puis passe l'élément en `fait` (`fait_le` = now(), titre « Ajouté aux courses : … », `trie_le` = now()) et journalise (action `courses`).
+- Garde en vraie tâche (`type` course) un achat qui demande une démarche, une recherche ou une date (« acheter un cadeau pour Léa », « commander des pneus »).

@@ -40,6 +40,17 @@
             android:src="@drawable/ic_actualiser" />
 
         <ImageButton
+            android:id="@+id/btn_courses"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/fond_bouton"
+            android:contentDescription="Liste de courses"
+            android:padding="7dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_courses" />
+
+        <ImageButton
             android:id="@+id/btn_dicter"
             android:layout_width="36dp"
             android:layout_height="36dp"

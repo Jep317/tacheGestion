@@ -34,6 +34,8 @@ const etat = {
   horsListe: new Map(),      // parents déjà faits, pour afficher « ↳ Garage » sous un enfant encore ouvert
   checklist: new Map(),      // item_id -> lignes de checklist triées
   replies: new Set(JSON.parse(lire('replies') || '[]')), // tâches dont on a replié les sous-tâches
+  courses: null,             // la tâche spéciale « 🛒 Courses » (items.special = 'courses'), hors des listes
+  articles: [],              // articles déjà achetés (table articles_courses), pour les suggestions
 };
 
 // ---------- utilitaires ----------
@@ -81,6 +83,7 @@ function afficherSelonSession(session) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, charger)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'checklist' }, charger)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'propositions' }, charger)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'articles_courses' }, charger)
       .subscribe();
     actionsDeLancement();
   } else if (!connecte && abonnement) {
@@ -120,9 +123,9 @@ function traduireErreur(err) {
 
 // ---------- données ----------
 async function charger() {
-  const [items, cats, liens, lignes, props] = await Promise.all([
+  const [items, cats, liens, lignes, props, articles] = await Promise.all([
     sb.from('items')
-      .select('id, texte_brut, titre, details, type, categorie_id, horizon, etat, theme, projet, ordre, echeance, cree_le, parent_id, priorite_jour, priorite_rang, priorite_raison')
+      .select('id, texte_brut, titre, details, type, categorie_id, horizon, etat, theme, projet, ordre, echeance, cree_le, parent_id, priorite_jour, priorite_rang, priorite_raison, special')
       .in('etat', ['a_trier', 'a_faire', 'en_cours'])
       .order('ordre', { ascending: true, nullsFirst: false })
       .order('cree_le', { ascending: true }),
@@ -131,10 +134,14 @@ async function charger() {
     sb.from('checklist').select('id, item_id, texte, coche, ordre, cree_le').order('ordre').order('cree_le'),
     sb.from('propositions').select('id, item_id, action, changements, raison, revue')
       .eq('statut', 'en_attente').order('cree_le'),
+    sb.from('articles_courses').select('nom, fois, dernier').order('fois', { ascending: false }).order('dernier', { ascending: false }).limit(300),
   ]);
   const error = items.error || cats.error || liens.error || lignes.error;
   if (error) { toast('Impossible de charger la liste : ' + error.message); return; }
-  etat.items = items.data;
+  // La liste de courses est une tâche à part : elle n'apparaît que dans l'onglet « Courses ».
+  etat.courses = items.data.find((i) => i.special === 'courses') || null;
+  etat.items = items.data.filter((i) => !i.special);
+  etat.articles = articles.data || [];
   etat.categories = cats.data;
   etat.liens = liens.data;
   etat.checklist = new Map();
@@ -355,6 +362,69 @@ async function cocherLigne(ligneId, coche) {
   afficher(); // tout de suite, sans attendre le serveur
   const { error } = await sb.from('checklist').update({ coche }).eq('id', ligneId);
   if (error) { toast('Modification impossible : ' + error.message); charger(); }
+}
+
+// ---------- liste de courses (tâche spéciale, ses articles = lignes de sa checklist) ----------
+const DELAI_ACHETE = 4000; // un article coché disparaît au bout de 4 secondes (le temps de se rattraper)
+const effacements = new Map(); // ligne id -> minuteur
+function articlesCourses() { return etat.courses ? lignesChecklist(etat.courses.id) : []; }
+
+/** Programme la disparition des articles cochés (y compris ceux cochés sur un autre appareil). */
+function programmerEffacements() {
+  for (const l of articlesCourses()) {
+    if (l.coche && !effacements.has(l.id)) {
+      effacements.set(l.id, setTimeout(async () => {
+        effacements.delete(l.id);
+        const encore = articlesCourses().find((x) => x.id === l.id);
+        if (!encore || !encore.coche) return;
+        await sb.from('checklist').delete().eq('id', l.id).eq('coche', true);
+        charger();
+      }, DELAI_ACHETE));
+    } else if (!l.coche && effacements.has(l.id)) {
+      clearTimeout(effacements.get(l.id));
+      effacements.delete(l.id);
+    }
+  }
+}
+
+async function ajouterArticles(texte, vocal = false) {
+  if (!etat.courses) { toast('Liste de courses introuvable.'); return false; }
+  // En dictée, « du lait et du pain » donne deux articles.
+  if (vocal) texte = texte.replace(/\s+(et|puis)\s+/gi, ',');
+  const deja = new Set(articlesCourses().filter((l) => !l.coche).map((l) => l.texte.toLowerCase()));
+  const nouveaux = decouperLignes(texte).filter((t) => !deja.has(t.toLowerCase()));
+  if (!nouveaux.length) { toast('Déjà dans la liste.'); return true; }
+  return ajouterLignesChecklist(etat.courses.id, nouveaux.join('\n'));
+}
+
+function afficherCourses() {
+  const lignes = articlesCourses();
+  const restants = lignes.filter((l) => !l.coche).length;
+  $('#liste-courses').innerHTML = lignes.length
+    ? lignes.map((l) => `<li class="${l.coche ? 'coche' : ''}"><label>
+        <input type="checkbox" data-check-coche="${l.id}" ${l.coche ? 'checked' : ''}>
+        <span>${echap(l.texte)}</span></label></li>`).join('')
+    : '<li class="vide">La liste est vide. Ajoute un article en bas.</li>';
+  const onglet = document.querySelector('[data-vue="courses"]');
+  if (onglet) onglet.textContent = '🛒 Courses' + (restants ? ` ${restants}` : '');
+  afficherSuggestions();
+  programmerEffacements();
+}
+
+/** Articles déjà achetés qui ne sont pas dans la liste, filtrés par ce qu'on tape. */
+function afficherSuggestions() {
+  const zone = $('#suggestions');
+  if (etat.vue !== 'courses') { zone.innerHTML = ''; return; }
+  const q = saisie.value.trim().toLowerCase();
+  const dedans = new Set(articlesCourses().filter((l) => !l.coche).map((l) => l.texte.toLowerCase()));
+  const proposes = etat.articles
+    .filter((a) => !dedans.has(a.nom.toLowerCase()) && (!q || a.nom.toLowerCase().includes(q)))
+    .sort((a, b) => q ? (b.nom.toLowerCase().startsWith(q) - a.nom.toLowerCase().startsWith(q)) || b.fois - a.fois : 0)
+    .slice(0, q ? 6 : 10);
+  zone.innerHTML = proposes.length
+    ? `<span class="discret petit">${q ? 'Déjà achetés :' : 'Souvent achetés :'}</span>` +
+      proposes.map((a) => `<button type="button" data-article="${echap(a.nom)}">＋ ${echap(a.nom)}</button>`).join('')
+    : '';
 }
 
 async function supprimerLigne(ligneId) {
@@ -738,6 +808,7 @@ function afficher() {
         <ul class="items">${g.notes.map((i) => carte(i, { cocher: false })).join('')}</ul>`).join('');
   }
   $('#liste-notes').innerHTML = htmlNotes;
+  afficherCourses();
   restaurerSaisies(garde);
 }
 
@@ -790,7 +861,12 @@ document.querySelectorAll('[data-vue]').forEach((b) => b.addEventListener('click
   document.querySelectorAll('[data-vue]').forEach((x) => x.setAttribute('aria-selected', x === b));
   $('#vue-liste').hidden = etat.vue !== 'liste';
   $('#vue-notes').hidden = etat.vue !== 'notes';
+  $('#vue-courses').hidden = etat.vue !== 'courses';
+  $('#filtres').hidden = etat.vue === 'courses';
+  document.body.classList.toggle('vue-courses', etat.vue === 'courses');
+  saisie.placeholder = etat.vue === 'courses' ? 'Ajouter à la liste de courses…' : 'Ajouter en vrac…';
   afficher();
+  if (etat.vue === 'courses' && !BUREAU && matchMedia('(hover: hover)').matches) saisie.focus();
 }));
 
 // Filtre par projet : les puces de l'entête et les titres de groupe dans « Notes ».
@@ -911,18 +987,30 @@ $('#recherche').addEventListener('input', (e) => { etat.recherche = e.target.val
 const saisie = $('#saisie');
 let sourceSaisie = 'app';
 function ajusterHauteur() { saisie.style.height = 'auto'; saisie.style.height = saisie.scrollHeight + 'px'; }
-saisie.addEventListener('input', ajusterHauteur);
+saisie.addEventListener('input', () => { ajusterHauteur(); afficherSuggestions(); });
 saisie.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#form-ajout').requestSubmit(); }
 });
 $('#form-ajout').addEventListener('submit', async (e) => {
   e.preventDefault();
   arreterDictee();
-  if (await ajouter(saisie.value, sourceSaisie)) {
+  const ok = etat.vue === 'courses'
+    ? await ajouterArticles(saisie.value, sourceSaisie === 'vocal')
+    : await ajouter(saisie.value, sourceSaisie);
+  if (ok) {
     saisie.value = '';
     sourceSaisie = 'app';
     ajusterHauteur();
+    afficherSuggestions();
+    if (etat.vue === 'courses') saisie.focus();
   }
+});
+// Suggestion touchée : ajoutée tout de suite.
+$('#suggestions').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-article]');
+  if (!b) return;
+  b.disabled = true;
+  if (await ajouterArticles(b.dataset.article)) { saisie.value = ''; ajusterHauteur(); afficherSuggestions(); }
 });
 
 const Reconnaissance = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -956,11 +1044,12 @@ let revueDemandee = false;
 // Raccourcis Android « Ajouter » et « Dicter » (?ajout=1, ?vocal=1)
 function actionsDeLancement() {
   const p = new URLSearchParams(location.search);
+  if (p.has('courses')) document.querySelector('[data-vue="courses"]').click();
   if (p.has('ajout')) saisie.focus();
   if (p.has('vocal')) demarrerDictee();
   if (p.has('categories')) ouvrirGestion();
   if (p.has('revue')) revueDemandee = true; // ouverte dès que les propositions sont chargées
-  if (p.has('ajout') || p.has('vocal') || p.has('categories') || p.has('revue')) history.replaceState(null, '', location.pathname + (BUREAU ? '?bureau=1' : ''));
+  if (p.has('courses') || p.has('ajout') || p.has('vocal') || p.has('categories') || p.has('revue')) history.replaceState(null, '', location.pathname + (BUREAU ? '?bureau=1' : ''));
 }
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

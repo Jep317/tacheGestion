@@ -81,6 +81,7 @@ class WidgetTaches : AppWidgetProvider() {
                 R.id.btn_dicter,
                 activite(ctx, 4, Intent(ctx, AjoutActivity::class.java).putExtra(AjoutActivity.VOCAL, true)),
             )
+            v.setOnClickPendingIntent(R.id.btn_courses, activite(ctx, 6, Intent(ctx, CoursesActivity::class.java)))
             val actu = Intent(ctx, WidgetTaches::class.java).setAction(ACTUALISER)
             v.setOnClickPendingIntent(
                 R.id.btn_actualiser,
@@ -103,6 +104,7 @@ class Fabrique(private val ctx: Context) : RemoteViewsService.RemoteViewsFactory
         class Entete(val nom: String, val compte: Int) : Ligne()
         class Tache(val item: Supabase.Item) : Ligne()
         class Info(val texte: String) : Ligne()
+        class Courses(val restants: Int) : Ligne()
     }
 
     private var lignes: List<Ligne> = emptyList()
@@ -146,6 +148,7 @@ class Fabrique(private val ctx: Context) : RemoteViewsService.RemoteViewsFactory
     private fun construire(items: List<Supabase.Item>): List<Ligne> {
         val res = mutableListOf<Ligne>()
         val listes = setOf("tache", "course")
+        Cache.courses(ctx).let { if (it >= 0) res += Ligne.Courses(it) }
         // Résumé du matin : les priorités choisies par Claude pour aujourd'hui (heure de Paris).
         val jour = java.time.LocalDate.now(java.time.ZoneId.of("Europe/Paris")).toString()
         val prio = items.filter { it.prioriteJour == jour && (it.etat == "a_faire" || it.etat == "en_cours") }
@@ -182,6 +185,12 @@ class Fabrique(private val ctx: Context) : RemoteViewsService.RemoteViewsFactory
             is Ligne.Info -> RemoteViews(ctx.packageName, R.layout.ligne_info).apply {
                 setTextViewText(R.id.texte, l.texte)
                 setOnClickFillInIntent(R.id.texte, Intent())
+            }
+            is Ligne.Courses -> RemoteViews(ctx.packageName, R.layout.ligne_tache).apply {
+                setTextViewText(R.id.titre, "🛒 Courses")
+                setTextViewText(R.id.meta, when (l.restants) { 0 -> "Liste vide · toucher pour ajouter"; 1 -> "1 article"; else -> "${l.restants} articles" })
+                setViewVisibility(R.id.meta, View.VISIBLE)
+                setOnClickFillInIntent(R.id.ligne, Intent().putExtra("courses", true))
             }
             is Ligne.Tache -> RemoteViews(ctx.packageName, R.layout.ligne_tache).apply {
                 val i = l.item
