@@ -53,6 +53,13 @@
             android:windowSoftInputMode="adjustResize|stateVisible" />
 
         <activity
+            android:name=".ConfirmerActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity=".confirmer"
+            android:theme="@style/Theme.Taches.Transparent" />
+
+        <activity
             android:name=".FiltreActivity"
             android:excludeFromRecents="true"
             android:exported="false"

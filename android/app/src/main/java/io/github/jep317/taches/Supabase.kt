@@ -235,7 +235,7 @@ object Supabase {
         journal(j, id, "cree", null, JSONObject().put("texte_brut", texte).put("source", source))
     }
 
-    fun changerEtat(ctx: Context, id: String, ancienEtat: String, nouvelEtat: String) {
+    fun changerEtat(ctx: Context, id: String, ancienEtat: String, nouvelEtat: String, action: String? = null, par: String = "appli") {
         val j = jeton(ctx)
         val maj = JSONObject().put("etat", nouvelEtat)
             .put("fait_le", if (nouvelEtat == "fait") java.time.Instant.now().toString() else JSONObject.NULL)
@@ -243,7 +243,7 @@ object Supabase {
             requete("PATCH", "/rest/v1/items?id=eq.${URLEncoder.encode(id, "UTF-8")}&select=id", maj.toString(), j, "return=representation")
         )
         if (rep.length() == 0) throw ErreurApi(404, "Élément introuvable")
-        journal(j, id, if (nouvelEtat == "fait") "termine" else "modifie", JSONObject().put("etat", ancienEtat), maj)
+        journal(j, id, action ?: if (nouvelEtat == "fait") "termine" else "modifie", JSONObject().put("etat", ancienEtat), maj, par)
     }
 
     // ---------- rappels (voir Rappels.kt) ----------

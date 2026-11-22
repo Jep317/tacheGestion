@@ -10,10 +10,15 @@
     android:paddingEnd="10dp"
     android:paddingBottom="8dp">
 
+    <!-- Rond à toucher pour terminer la tâche (avec confirmation). -->
     <TextView
+        android:id="@+id/rond"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginEnd="8dp"
+        android:layout_marginStart="-6dp"
+        android:layout_marginTop="-6dp"
+        android:layout_marginEnd="2dp"
+        android:padding="6dp"
         android:text="○"
         android:textColor="@color/accent"
         android:textSize="15sp" />

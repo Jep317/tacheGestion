@@ -321,6 +321,12 @@ class DetailActivity : Activity() {
             return
         }
         val id = intent.getStringExtra("id")
+        if (id != null && intent.getStringExtra("action") == "terminer") {
+            // Rond touché dans le widget : simple fenêtre de confirmation.
+            startActivity(Intent(this, ConfirmerActivity::class.java).putExtras(intent))
+            finish()
+            return
+        }
         if (id == null) {
             // Ligne de résumé : ouvrir l'appli complète (ou la connexion si besoin).
             if (Supabase.estConnecte(this)) ouvrirAppliWeb(this)
@@ -344,6 +350,28 @@ class DetailActivity : Activity() {
         val estNote = intent.getStringExtra("type") in setOf("note", "idee")
         if (etatActuel == "en_cours" || estNote) enCours.visibility = View.GONE
         if (estNote) fait.text = "Archiver"
+        val supprimer = findViewById<Button>(R.id.btn_supprimer)
+        if (!estNote) supprimer.visibility = View.GONE
+        supprimer.setOnClickListener {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Supprimer cette note ?")
+                .setMessage(intent.getStringExtra("libelle"))
+                .setNegativeButton("Annuler", null)
+                .setPositiveButton("Supprimer") { _, _ ->
+                    supprimer.isEnabled = false
+                    enFond({ Supabase.changerEtat(this, id, etatActuel, "abandonne", action = "supprime", par = "jeremie") }) { erreur ->
+                        if (erreur == null) {
+                            Toast.makeText(this, "Note supprimée.", Toast.LENGTH_SHORT).show()
+                            WidgetTaches.actualiser(this)
+                            finish()
+                        } else {
+                            supprimer.isEnabled = true
+                            Toast.makeText(this, "Suppression impossible : " + (erreur.message ?: "erreur"), Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+                .show()
+        }
         findViewById<Button>(R.id.btn_fermer).setOnClickListener { finish() }
         findViewById<Button>(R.id.btn_appli).setOnClickListener { ouvrirAppliWeb(this); finish() }
 
@@ -482,5 +510,35 @@ class DetailActivity : Activity() {
                 Toast.makeText(this, "Rappel impossible : " + (erreur.message ?: "erreur"), Toast.LENGTH_LONG).show()
             }
         }
+    }
+}
+
+// ---------- Confirmation avant de terminer une tâche depuis le widget ----------
+class ConfirmerActivity : Activity() {
+    override fun onCreate(etat: Bundle?) {
+        super.onCreate(etat)
+        val id = intent.getStringExtra("id")
+        if (id == null) { finish(); return }
+        val libelle = intent.getStringExtra("libelle") ?: ""
+        val etatActuel = intent.getStringExtra("etat") ?: "a_faire"
+        val nuit = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val theme = if (nuit) android.R.style.Theme_Material_Dialog_Alert else android.R.style.Theme_Material_Light_Dialog_Alert
+        android.app.AlertDialog.Builder(this, theme)
+            .setTitle("Terminer cette tâche ?")
+            .setMessage(libelle)
+            .setNegativeButton("Annuler", null)
+            .setPositiveButton("✓ Terminer") { _, _ ->
+                val ctx = applicationContext
+                thread {
+                    val erreur = try { Supabase.changerEtat(ctx, id, etatActuel, "fait"); null } catch (e: Exception) { e }
+                    principal.post {
+                        Toast.makeText(ctx, if (erreur == null) "Fait : $libelle" else "Impossible : " + (erreur.message ?: "erreur"), Toast.LENGTH_SHORT).show()
+                        WidgetTaches.actualiser(ctx)
+                    }
+                }
+            }
+            .setOnDismissListener { finish() }
+            .show()
     }
 }

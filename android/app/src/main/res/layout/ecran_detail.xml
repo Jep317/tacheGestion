@@ -144,6 +144,14 @@
         android:orientation="horizontal">
 
         <Button
+            android:id="@+id/btn_supprimer"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Supprimer"
+            android:textColor="#B23A3A" />
+
+        <Button
             android:id="@+id/btn_fermer"
             style="?android:attr/borderlessButtonStyle"
             android:layout_width="wrap_content"
