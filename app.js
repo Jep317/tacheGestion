@@ -31,7 +31,8 @@ const etat = {
   propositions: [],
   questions: [],             // questions simples de Claude (« c'est dans quelle tâche ? »)          // revue de la semaine : propositions de Claude en attente de réponse
   ouverts: new Set(),        // éléments dont on affiche le détail
-  reglages: new Set(),       // fiches dont le panneau « Réglages » est déplié
+  reglages: new Set(),
+  edition: new Set(),        // fiches en mode édition (bouton ✏) : titre et texte modifiables       // fiches dont le panneau « Réglages » est déplié
   ajouts: new Map(),         // fiche -> champ d'ajout affiché ('sous', 'check' ou 'note')
   sections: BUREAU ? {} : JSON.parse(lire('sections') || '{}'),
   liens: [],                 // tous les enfants (faits compris) : { id, parent_id, etat, type }, pour la progression « 2/5 »
@@ -557,9 +558,12 @@ function infosDe(i, parent) {
 function fiche(i, { niveau, cocher, cleOuvert, parent, notes, brut }) {
   const parties = [];
   const note = TYPES_NOTES.includes(i.type);
-  if (i.etat === 'a_trier') { if (i.details) parties.push(`<div class="description">${echap(i.details)}</div>`); }
-  else parties.push(`<textarea class="description description-edit${note ? ' note' : ''}" rows="${note ? 3 : 1}" data-edition="details" data-id="${i.id}" data-cle="${echap(cleOuvert)}"
+  if (!etat.edition.has(cleOuvert) || i.etat === 'a_trier') {
+    if (i.details) parties.push(`<div class="description">${echap(i.details)}</div>`);
+    else if (note && i.etat !== 'a_trier') parties.push(`<button type="button" class="description vide-note" data-editer="${echap(cleOuvert)}">✏️ Écrire le texte de la note</button>`);
+  } else parties.push(`<textarea class="description description-edit${note ? ' note' : ''}" rows="${note ? 3 : 1}" data-edition="details" data-id="${i.id}" data-cle="${echap(cleOuvert)}"
     aria-label="${note ? 'Texte de la note' : 'Description'}" placeholder="${note ? 'Écris le texte de ta note…' : 'Ajouter une description…'}">${echap(i.details || '')}</textarea>`);
+  if (etat.edition.has(cleOuvert) && i.etat !== 'a_trier') parties.push(`<div class="fin-edition"><button type="button" class="principal petit-bouton" data-fin-edition="${echap(cleOuvert)}">Terminé</button></div>`);
   parties.push(infosDe(i, parent));
   if (!brut && !note && i.texte_brut && i.texte_brut !== i.titre && i.texte_brut !== i.details) {
     parties.push(`<p class="dicte" title="Ce que tu as dicté ou écrit">« ${echap(i.texte_brut)} »</p>`);
@@ -907,7 +911,8 @@ function carte(i, { cocher = true, niveau = 0, contexte = false, raison = '', ar
   let detail = '';
   if (ouvert) detail = fiche(i, { niveau, cocher, cleOuvert, parent, notes, brut });
   // Fiche ouverte : le titre se modifie sur place (sauf « à trier », que Claude n'a pas encore rangé).
-  const editable = ouvert && !brut && i.etat !== 'a_trier';
+  const modifiable = ouvert && !brut && i.etat !== 'a_trier';
+  const editable = modifiable && etat.edition.has(cleOuvert);
   let html = `<li class="item${brut ? ' brut' : ''}${niveau ? ' sous-tache' : ''}${ouvert ? ' ouvert' : ''}" data-id="${i.id}">
     ${cocher ? `<button class="case" data-action="fait" data-id="${i.id}" aria-label="Marquer comme fait" title="Fait"></button>` : '<span></span>'}
     <div class="corps" data-action="ouvrir" data-id="${i.id}" data-ouvrir="${cleOuvert}">
@@ -917,7 +922,7 @@ function carte(i, { cocher = true, niveau = 0, contexte = false, raison = '', ar
       ${ouvert ? (prog.total ? `<div class="meta">${tags[tags.findIndex((t) => t.includes('data-action="arbre"'))] || ''}</div>` : '')
         : tags.length ? `<div class="meta">${tags.join('')}</div>` : ''}
     </div>
-    ${ouvert ? `<button type="button" class="fermer-fiche" data-action="ouvrir" data-id="${i.id}" data-ouvrir="${cleOuvert}" aria-label="Refermer" title="Refermer">⌃</button>` : ''}
+    ${modifiable && !editable ? `<button type="button" class="crayon" data-editer="${echap(cleOuvert)}" aria-label="Modifier le titre et le texte" title="Modifier">✏️</button>` : ''}
     ${detail}
   </li>`;
   // L'arbre : les sous-tâches sous leur parent, reliées par un trait.
@@ -1106,16 +1111,38 @@ async function enregistrerEdition(c) {
   if (await majItem({ id: item.id, [champ]: ancien }, { [champ]: v || null })) toast('Enregistré.');
 }
 document.addEventListener('input', (e) => { if (e.target.matches?.('[data-edition]')) ajusterHauteurDe(e.target); });
+function quitterEdition(cle) {
+  const actif = document.activeElement;
+  if (actif?.matches?.('[data-edition]')) actif.blur(); // enregistre
+  etat.edition.delete(cle);
+  afficher();
+}
+document.addEventListener('click', (e) => {
+  const ed = e.target.closest('[data-editer]');
+  if (ed) {
+    e.stopPropagation();
+    const cle = ed.dataset.editer;
+    etat.edition.add(cle);
+    afficher();
+    const champ = document.querySelector(`[data-edition="details"][data-cle="${CSS.escape(cle)}"]`);
+    if (champ) { champ.focus({ preventScroll: true }); champ.setSelectionRange(champ.value.length, champ.value.length); }
+    return;
+  }
+  const fin = e.target.closest('[data-fin-edition]');
+  if (fin) quitterEdition(fin.dataset.finEdition);
+}, true);
 document.addEventListener('focusout', (e) => { if (e.target.matches?.('[data-edition]')) enregistrerEdition(e.target); });
 document.addEventListener('keydown', (e) => {
   const c = e.target;
   if (!c.matches?.('[data-edition]')) return;
-  if (c.dataset.edition === 'titre' && e.key === 'Enter') { e.preventDefault(); c.blur(); }
-  else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); c.blur(); }
+  if (c.dataset.edition === 'titre' && e.key === 'Enter') {
+    e.preventDefault();
+    document.querySelector(`[data-edition="details"][data-cle="${CSS.escape(c.dataset.cle)}"]`)?.focus();
+  } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); quitterEdition(c.dataset.cle); }
   else if (e.key === 'Escape') {
     const item = etat.items.find((i) => i.id === c.dataset.id);
     if (item) c.value = c.dataset.edition === 'titre' ? libelle(item) : (item.details || '');
-    c.blur();
+    quitterEdition(c.dataset.cle);
   }
 });
 
@@ -1410,6 +1437,7 @@ document.addEventListener('click', (e) => {
   const action = cible.dataset.action;
   if (action === 'ouvrir') {
     const cle = cible.dataset.ouvrir || item.id;
+    etat.edition.delete(cle);
     etat.ouverts.has(cle) ? etat.ouverts.delete(cle) : etat.ouverts.add(cle);
     afficher();
   } else if (action === 'fait') {
