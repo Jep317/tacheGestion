@@ -1593,7 +1593,21 @@ function actionsDeLancement() {
   if (p.has('courses') || p.has('notes') || p.has('ajout') || p.has('vocal') || p.has('categories') || p.has('revue') || p.has('item')) history.replaceState(null, '', location.pathname + (BUREAU ? '?bureau=1' : ''));
 }
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator) {
+  // Une nouvelle version du site vient de s'installer : on recharge une fois pour l'afficher tout de suite.
+  const avaitUnControleur = !!navigator.serviceWorker.controller;
+  let recharge = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!avaitUnControleur || recharge) return;
+    recharge = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((r) => {
+    // Le panneau Windows reste ouvert des jours : on vérifie s'il y a une nouvelle version au retour sur la page.
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) r.update().catch(() => {}); });
+    setInterval(() => r.update().catch(() => {}), 30 * 60 * 1000);
+  }).catch(() => {});
+}
 
 // En fond d'écran, la page reste ouverte des jours : on rafraîchit la date et la liste de temps en temps.
 if (BUREAU) setInterval(() => { charger(); }, 15 * 60 * 1000);
