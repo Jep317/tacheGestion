@@ -348,6 +348,9 @@ class DetailActivity : Activity() {
         remplir(R.id.details, intent.getStringExtra("details"))
         remplir(R.id.brut, intent.getStringExtra("brut")?.let { "« $it »" })
 
+        // Contenu (sous-tâches, checklist, notes attachées), ✏ et ＋ : chargés depuis la base.
+        preparerContenu(id, intent.getStringExtra("type") in setOf("note", "idee"))
+
         val fait = findViewById<Button>(R.id.btn_fait)
         val enCours = findViewById<Button>(R.id.btn_en_cours)
         val estNote = intent.getStringExtra("type") in setOf("note", "idee")
@@ -408,6 +411,168 @@ class DetailActivity : Activity() {
             Rappels.demanderPermission(this)
             choisirRappel(id)
         }
+    }
+
+    // ---------- contenu de la fiche, édition du titre et du texte, menu ＋ ----------
+    private var fiche: Supabase.Fiche? = null
+
+    private fun dp(n: Int) = (n * resources.displayMetrics.density).toInt()
+
+    private fun preparerContenu(id: String, estNote: Boolean) {
+        val editer = findViewById<Button>(R.id.btn_editer)
+        val plus = findViewById<Button>(R.id.btn_plus)
+        editer.isEnabled = false
+        plus.isEnabled = false
+        editer.setOnClickListener { fiche?.let { editerTexte(id, it) } }
+        plus.setOnClickListener { fiche?.let { menuPlus(id, it, estNote) } }
+        chargerContenu(id)
+    }
+
+    private fun chargerContenu(id: String) {
+        var recu: Supabase.Fiche? = null
+        enFond({ recu = Supabase.fiche(this, id) }) { _ ->
+            val f = recu
+            if (f != null) {
+                fiche = f
+                afficherContenu(id, f)
+            }
+            findViewById<Button>(R.id.btn_editer).isEnabled = fiche != null
+            findViewById<Button>(R.id.btn_plus).isEnabled = fiche != null
+        }
+    }
+
+    private fun afficherContenu(id: String, f: Supabase.Fiche) {
+        findViewById<TextView>(R.id.titre).text = f.titre
+        val det = findViewById<TextView>(R.id.details)
+        if (f.details.isNullOrBlank()) det.visibility = View.GONE else { det.visibility = View.VISIBLE; det.text = f.details }
+        val boite = findViewById<android.widget.LinearLayout>(R.id.contenu)
+        boite.removeAllViews()
+        fun rubrique(t: String) {
+            boite.addView(TextView(this).apply {
+                text = t
+                setTextAppearance(R.style.Rubrique)
+                setPadding(0, dp(16), 0, dp(2))
+            })
+        }
+        val taches = f.enfants.filter { it.type == "tache" || it.type == "course" }
+        val notes = f.enfants.filter { it.type == "note" || it.type == "idee" }
+        if (taches.isNotEmpty()) {
+            rubrique("Sous-tâches · ${taches.count { it.etat == "fait" }}/${taches.size}")
+            for (t in taches) boite.addView(caseACocher(t.libelle, t.etat == "fait") { coche ->
+                enFond({ Supabase.changerEtat(this, t.id, t.etat, if (coche) "fait" else "a_faire") }) { e -> apres(id, e) }
+            })
+        }
+        if (f.lignes.isNotEmpty()) {
+            rubrique("Checklist · ${f.lignes.count { it.coche }}/${f.lignes.size}")
+            for (l in f.lignes) boite.addView(caseACocher(l.texte, l.coche) { coche ->
+                enFond({ Supabase.cocherArticle(this, l.id, coche) }) { e -> apres(id, e) }
+            })
+        }
+        if (notes.isNotEmpty()) {
+            rubrique("Notes")
+            for (n in notes) boite.addView(TextView(this).apply {
+                text = "📝  " + n.libelle
+                textSize = 15f
+                setTextColor(getColor(R.color.texte))
+                setPadding(0, dp(6), 0, dp(6))
+            })
+        }
+    }
+
+    private fun caseACocher(texte: String, coche: Boolean, changer: (Boolean) -> Unit) = android.widget.CheckBox(this).apply {
+        text = texte
+        isChecked = coche
+        textSize = 15f
+        setTextColor(getColor(if (coche) R.color.discret else R.color.texte))
+        buttonTintList = android.content.res.ColorStateList.valueOf(getColor(R.color.accent))
+        if (coche) paintFlags = paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
+        setOnCheckedChangeListener { b, v ->
+            b.isEnabled = false
+            changer(v)
+        }
+    }
+
+    /** Après une modification : message d'erreur éventuel, contenu rechargé, widget redessiné en quittant. */
+    private fun apres(id: String, e: Exception?) {
+        if (e != null) Toast.makeText(this, "Impossible : " + (e.message ?: "erreur"), Toast.LENGTH_LONG).show()
+        aBouge = true
+        chargerContenu(id)
+    }
+
+    private fun champ(texte: String, aide: String, lignes: Int): EditText = EditText(this).apply {
+        setText(texte)
+        hint = aide
+        inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
+            (if (lignes > 1) android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE else 0)
+        if (lignes > 1) { minLines = lignes; gravity = android.view.Gravity.TOP }
+    }
+
+    private fun editerTexte(id: String, f: Supabase.Fiche) {
+        val titre = champ(f.titre, "Titre", 1)
+        val texte = champ(f.details ?: "", "Texte (facultatif)", 4)
+        val boite = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+            addView(titre)
+            addView(texte)
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Modifier")
+            .setView(boite)
+            .setNegativeButton("Annuler", null)
+            .setPositiveButton("Enregistrer") { _, _ ->
+                val t = titre.text.toString().replace(Regex("\\s+"), " ").trim()
+                if (t.isEmpty()) {
+                    Toast.makeText(this, "Le titre ne peut pas être vide.", Toast.LENGTH_SHORT).show()
+                } else {
+                    val d = texte.text.toString().trimEnd().ifEmpty { null }
+                    enFond({ Supabase.modifierTexte(this, id, f, t, d) }) { e ->
+                        if (e == null) Toast.makeText(this, "Enregistré.", Toast.LENGTH_SHORT).show()
+                        apres(id, e)
+                    }
+                }
+            }
+            .show()
+    }
+
+    private fun menuPlus(id: String, f: Supabase.Fiche, estNote: Boolean) {
+        // (libellé, titre de la saisie, aide, action)
+        val choix = mutableListOf<Triple<String, String, String>>()
+        if (!estNote) choix += Triple("↳  Sous-tâche", "Nouvelle sous-tâche", "Ce qu'il faut faire")
+        choix += Triple("☑  Checklist", "Lignes de checklist", "Une ligne par virgule ou retour à la ligne")
+        if (!estNote) choix += Triple("📝  Note rattachée", "Note rattachée", "Le texte de la note")
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Ajouter")
+            .setItems(choix.map { it.first }.toTypedArray()) { _, n ->
+                val (libelle, titre, aide) = choix[n]
+                demanderTexte(titre, aide) { texte ->
+                    enFond({
+                        when {
+                            libelle.contains("Sous-tâche") -> Supabase.ajouterSousTache(this, id, f, texte)
+                            libelle.contains("Checklist") -> Supabase.ajouterLignes(this, id, f, texte)
+                            else -> Supabase.attacherNote(this, id, f, texte)
+                        }
+                    }) { e -> apres(id, e) }
+                }
+            }
+            .show()
+    }
+
+    private fun demanderTexte(titre: String, aide: String, ok: (String) -> Unit) {
+        val saisie = champ("", aide, 2)
+        val boite = android.widget.FrameLayout(this).apply {
+            setPadding(dp(20), dp(8), dp(20), 0)
+            addView(saisie)
+        }
+        val d = android.app.AlertDialog.Builder(this)
+            .setTitle(titre)
+            .setView(boite)
+            .setNegativeButton("Annuler", null)
+            .setPositiveButton("Ajouter") { _, _ -> saisie.text.toString().trim().takeIf { it.isNotEmpty() }?.let(ok) }
+            .create()
+        d.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+        d.show()
+        saisie.requestFocus()
     }
 
     private val horizons = listOf(

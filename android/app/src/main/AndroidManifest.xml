@@ -53,6 +53,14 @@
             android:windowSoftInputMode="adjustResize|stateVisible" />
 
         <activity
+            android:name=".RouteurActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:taskAffinity=".routeur"
+            android:theme="@style/Theme.Taches.Transparent" />
+
+        <activity
             android:name=".ConfirmerActivity"
             android:excludeFromRecents="true"
             android:exported="false"

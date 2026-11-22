@@ -19,14 +19,34 @@
             android:layout_gravity="center_horizontal"
             android:background="@drawable/fond_poignee" />
 
-        <TextView
-            android:id="@+id/titre"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
-            android:textColor="@color/texte"
-            android:textSize="20sp"
-            android:textStyle="bold" />
+            android:gravity="top"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/titre"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="@color/texte"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <!-- ✏ : modifier le titre et le texte. -->
+            <Button
+                android:id="@+id/btn_editer"
+                style="@style/Bouton.Lien"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_marginTop="-8dp"
+                android:contentDescription="Modifier le titre et le texte"
+                android:text="✏️"
+                android:textSize="18sp" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/meta"
@@ -52,6 +72,23 @@
             android:textColor="@color/discret"
             android:textSize="13sp"
             android:textStyle="italic" />
+
+        <!-- Sous-tâches, checklist et notes attachées (remplies par le code), puis le menu ＋. -->
+        <LinearLayout
+            android:id="@+id/contenu"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <Button
+            android:id="@+id/btn_plus"
+            style="@style/Bouton.Pilule"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="＋ Ajouter…" />
 
         <!-- Priorité : place dans l'horizon, puis horizon. -->
         <LinearLayout

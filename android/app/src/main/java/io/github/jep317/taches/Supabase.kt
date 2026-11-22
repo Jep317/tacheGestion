@@ -320,6 +320,97 @@ object Supabase {
         requete("DELETE", "/rest/v1/checklist?id=eq.$id&coche=is.true", null, jeton(ctx), "return=minimal")
     }
 
+    // ---------- fiche : contenu (sous-tâches, notes attachées, checklist), édition, ajouts ----------
+    class Enfant(val id: String, val libelle: String, val type: String, val etat: String)
+    class LigneCheck(val id: String, val texte: String, val coche: Boolean)
+    class Fiche(
+        val titre: String, val details: String?, val categorieId: String?, val projet: String?, val horizon: String?,
+        val profondeur: Int, val enfants: List<Enfant>, val lignes: List<LigneCheck>,
+    )
+
+    private fun enc(v: String) = URLEncoder.encode(v, "UTF-8")
+
+    fun fiche(ctx: Context, id: String): Fiche {
+        val j = jeton(ctx)
+        val t = JSONArray(requete("GET", "/rest/v1/items?select=titre,texte_brut,details,categorie_id,projet,horizon,parent_id&id=eq.${enc(id)}", null, j))
+        if (t.length() == 0) throw ErreurApi(404, "Élément introuvable")
+        val o = t.getJSONObject(0)
+        fun JSONObject.ch(c: String): String? = if (isNull(c)) null else optString(c).ifBlank { null }
+        // Profondeur (0 = tâche de premier niveau) : trois niveaux au plus, comme l'appli web.
+        var prof = 0
+        var parent = o.ch("parent_id")
+        while (parent != null && prof < 3) {
+            prof++
+            val p = JSONArray(requete("GET", "/rest/v1/items?select=parent_id&id=eq.${enc(parent)}", null, j))
+            parent = if (p.length() == 0) null else p.getJSONObject(0).ch("parent_id")
+        }
+        val e = JSONArray(requete(
+            "GET",
+            "/rest/v1/items?select=id,titre,texte_brut,type,etat&parent_id=eq.${enc(id)}&etat=in.(a_trier,a_faire,en_cours,fait)" +
+                "&order=ordre.asc.nullslast,cree_le.asc",
+            null, j,
+        ))
+        val enfants = (0 until e.length()).map { n ->
+            val x = e.getJSONObject(n)
+            Enfant(x.getString("id"), x.ch("titre") ?: x.optString("texte_brut"), x.optString("type"), x.optString("etat"))
+        }
+        val l = JSONArray(requete("GET", "/rest/v1/checklist?select=id,texte,coche&item_id=eq.${enc(id)}&order=ordre.asc,cree_le.asc", null, j))
+        val lignes = (0 until l.length()).map { n ->
+            val x = l.getJSONObject(n)
+            LigneCheck(x.getString("id"), x.optString("texte"), x.optBoolean("coche"))
+        }
+        return Fiche(o.ch("titre") ?: o.optString("texte_brut"), o.ch("details"), o.ch("categorie_id"), o.ch("projet"),
+            o.ch("horizon"), prof, enfants, lignes)
+    }
+
+    /** Titre et texte modifiés à la main (✏ de la fiche). */
+    fun modifierTexte(ctx: Context, id: String, avant: Fiche, titre: String, details: String?) {
+        val j = jeton(ctx)
+        val champs = JSONObject()
+        val ancien = JSONObject()
+        if (titre != avant.titre) { champs.put("titre", titre); ancien.put("titre", avant.titre) }
+        if ((details ?: "") != (avant.details ?: "")) { champs.put("details", details ?: JSONObject.NULL); ancien.put("details", avant.details ?: JSONObject.NULL) }
+        if (champs.length() == 0) return
+        requete("PATCH", "/rest/v1/items?id=eq.${enc(id)}", champs.toString(), j, "return=minimal")
+        journal(j, id, "modifie", ancien, champs)
+    }
+
+    private fun creer(j: String, ligne: JSONObject) {
+        val rep = JSONArray(requete("POST", "/rest/v1/items?select=id", ligne.toString(), j, "return=representation"))
+        if (rep.length() == 0) throw ErreurApi(403, "Ajout refusé")
+        journal(j, rep.getJSONObject(0).getString("id"), "cree", null, ligne)
+    }
+
+    fun ajouterSousTache(ctx: Context, parentId: String, parent: Fiche, texte: String) {
+        if (parent.profondeur + 1 >= 3) throw ErreurApi(400, "Trois niveaux de sous-tâches au maximum.")
+        val ligne = JSONObject().put("texte_brut", texte).put("titre", texte).put("type", "tache").put("etat", "a_faire")
+            .put("source", "app").put("parent_id", parentId).put("horizon", parent.horizon ?: "bientot")
+            .put("categorie_id", parent.categorieId ?: JSONObject.NULL).put("projet", parent.projet ?: JSONObject.NULL)
+        creer(jeton(ctx), ligne)
+    }
+
+    fun attacherNote(ctx: Context, parentId: String, parent: Fiche, texte: String) {
+        val premiere = texte.lineSequence().first().trim()
+        val titre = if (premiere.length > 80) premiere.take(77) + "…" else premiere
+        val ligne = JSONObject().put("texte_brut", texte).put("titre", titre)
+            .put("details", if (texte == titre) JSONObject.NULL else texte).put("type", "note").put("etat", "a_faire")
+            .put("source", "app").put("parent_id", parentId)
+            .put("categorie_id", parent.categorieId ?: JSONObject.NULL).put("projet", parent.projet ?: JSONObject.NULL)
+        creer(jeton(ctx), ligne)
+    }
+
+    /** Une ligne de checklist par retour à la ligne, point-virgule ou virgule (comme l'appli web). */
+    fun ajouterLignes(ctx: Context, itemId: String, fiche: Fiche, texte: String) {
+        val textes = texte.split(Regex("[\\n;,]+")).map { it.trim() }.filter { it.isNotEmpty() }.map { it.take(200) }
+        if (textes.isEmpty()) return
+        val j = jeton(ctx)
+        val existants = JSONArray(requete("GET", "/rest/v1/checklist?select=ordre&item_id=eq.${enc(itemId)}", null, j))
+        val depart = ((0 until existants.length()).maxOfOrNull { existants.getJSONObject(it).optInt("ordre") } ?: 0) + 1
+        val corps = JSONArray()
+        textes.forEachIndexed { n, t -> corps.put(JSONObject().put("item_id", itemId).put("texte", t).put("ordre", depart + n)) }
+        requete("POST", "/rest/v1/checklist", corps.toString(), j, "return=minimal")
+    }
+
     // ---------- priorités (déplacement par Jérémie, comme le glisser-déposer de l'appli web) ----------
     class Place(val horizon: String, val rang: Int, val total: Int)
 
