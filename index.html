@@ -72,6 +72,16 @@
     </div>
   </div>
 
+  <div id="dlg-projets" class="voile" hidden>
+    <div class="fenetre" role="dialog" aria-modal="true" aria-labelledby="titre-projets">
+      <h2 id="titre-projets">Projets</h2>
+      <p class="discret petit">Claude range les éléments dans des projets. Modifie un nom pour le renommer ; donne-lui le nom d'un autre projet pour les fusionner. Pour changer le projet d'une seule tâche ou note, ouvre-la.</p>
+      <ul id="liste-projets" class="categories"></ul>
+      <p class="fin"><button type="button" id="btn-fermer-projets" class="principal">Terminé</button></p>
+    </div>
+  </div>
+  <datalist id="projets-connus"></datalist>
+
   <div id="dlg-revue" class="voile" hidden>
     <div class="fenetre" role="dialog" aria-modal="true" aria-labelledby="titre-revue">
       <h2 id="titre-revue">Revue de la semaine</h2>
