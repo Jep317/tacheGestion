@@ -28,7 +28,8 @@ const etat = {
   filtre: lire('filtre') || 'tout', // 'tout', 'aucune' ou l'id d'une catégorie
   projet: lire('projet') || '',      // '' = tous les projets, '-' = sans projet, sinon le nom du projet (rangé par Claude)
   recherche: '',
-  propositions: [],          // revue de la semaine : propositions de Claude en attente de réponse
+  propositions: [],
+  questions: [],             // questions simples de Claude (« c'est dans quelle tâche ? »)          // revue de la semaine : propositions de Claude en attente de réponse
   ouverts: new Set(),        // éléments dont on affiche le détail
   sections: BUREAU ? {} : JSON.parse(lire('sections') || '{}'),
   liens: [],                 // tous les enfants (faits compris) : { id, parent_id, etat, type }, pour la progression « 2/5 »
@@ -85,6 +86,7 @@ function afficherSelonSession(session) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rappels' }, charger)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'checklist' }, charger)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'propositions' }, charger)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'questions' }, charger)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'articles_courses' }, charger)
       .subscribe();
     actionsDeLancement();
@@ -125,7 +127,7 @@ function traduireErreur(err) {
 
 // ---------- données ----------
 async function charger() {
-  const [items, cats, liens, lignes, props, articles, rappels] = await Promise.all([
+  const [items, cats, liens, lignes, props, articles, rappels, questions] = await Promise.all([
     sb.from('items')
       .select('id, texte_brut, titre, details, type, categorie_id, horizon, etat, theme, projet, ordre, echeance, echeance_heure, recurrence, cree_le, parent_id, priorite_jour, priorite_rang, priorite_raison, special')
       .in('etat', ['a_trier', 'a_faire', 'en_cours'])
@@ -139,6 +141,7 @@ async function charger() {
     sb.from('articles_courses').select('nom, fois, dernier').order('fois', { ascending: false }).order('dernier', { ascending: false }).limit(300),
     sb.from('rappels').select('id, item_id, titre, texte, quand, relatif_min')
       .gte('quand', new Date(Date.now() - 3600e3).toISOString()).order('quand'),
+    sb.from('questions').select('id, item_id, question, choix').eq('statut', 'en_attente').order('cree_le'),
   ]);
   const error = items.error || cats.error || liens.error || lignes.error || rappels.error;
   if (error) { toast('Impossible de charger la liste : ' + error.message); return; }
@@ -165,6 +168,7 @@ async function charger() {
   }
   // Les propositions ne sont pas bloquantes : si la table manque, on affiche quand même la liste.
   etat.propositions = (props.data || []).filter((p) => etat.items.some((i) => i.id === p.item_id));
+  etat.questions = questions.data || []; // non bloquant non plus
   if (etat.filtre !== 'tout' && etat.filtre !== 'aucune' && !categorie(etat.filtre)) etat.filtre = 'tout';
   afficherFiltres();
   afficher();
@@ -728,6 +732,30 @@ function blocAujourdhui() {
   </section>`;
 }
 
+// ---------- questions simples de Claude ----------
+// Quand Claude hésite (« ça va dans quelle tâche ? »), il range l'élément à part et pose la question ici.
+function blocQuestions() {
+  const qs = etat.questions;
+  if (!qs.length) return '';
+  return `<section class="questions">
+    <h2>${qs.length > 1 ? qs.length + ' questions' : 'Une question'} de Claude</h2>
+    ${qs.map((q) => `<div class="question" data-question="${q.id}">
+      <div class="texte">${echap(q.question)}</div>
+      <div class="choix">${(q.choix || []).map((c, n) =>
+        `<button type="button" class="${c.cible_id ? 'principal' : 'lien'}" data-choix="${n}">${echap(c.libelle)}</button>`).join('')}</div>
+    </div>`).join('')}
+  </section>`;
+}
+
+async function repondreQuestion(id, choix) {
+  const { data, error } = await sb.rpc('repondre_question', { p_id: id, p_choix: choix });
+  if (error) toast('Réponse impossible : ' + error.message);
+  else if (data === 'rattachee') toast('Précision ajoutée.');
+  else if (data === 'garde') toast('Gardé à part.');
+  else if (data === 'expiree') toast('Cette question n\'est plus d\'actualité.');
+  await charger();
+}
+
 // ---------- revue de la semaine ----------
 const NOMS_HORIZONS = Object.fromEntries(HORIZONS.map((h) => [h.cle, h.nom]));
 function libelleProposition(p) {
@@ -787,7 +815,7 @@ function afficher() {
   for (const h of HORIZONS) {
     html += section(h.cle, h.nom, liste.filter((i) => i.etat !== 'a_trier' && i.horizon === h.cle && TYPES_LISTE.includes(i.type) && visibleSeule(i, visibles)), h.ouvert);
   }
-  html = bandeauRevue() + blocAujourdhui() + html;
+  html = blocQuestions() + bandeauRevue() + blocAujourdhui() + html;
   if (BUREAU) {
     const maintenant = new Date();
     html = `<div class="date-bureau">${maintenant.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</div>` + html;
@@ -1105,6 +1133,7 @@ function montrerNotif(r, item, cle) {
       window.focus();
       if (item) allerA(item.id);
       else if (/^revue/i.test(titre) && etat.propositions?.length) ouvrirRevue();
+      else if (/^question/i.test(titre)) { document.querySelector('[data-vue="liste"]')?.click(); window.scrollTo(0, 0); }
       n.close();
     };
   } catch { /* notifications refusées par le système */ }
@@ -1255,6 +1284,15 @@ $('#liste-categories').addEventListener('keydown', (e) => {
 $('#btn-fermer-categories').addEventListener('click', fermerGestion);
 $('#dlg-categories').addEventListener('click', (e) => { if (e.target.id === 'dlg-categories') fermerGestion(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#dlg-categories').hidden) fermerGestion(); });
+
+// Questions de Claude : un tap sur un choix suffit.
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-choix]');
+  const q = b?.closest('[data-question]');
+  if (!q) return;
+  q.classList.add('traitee');
+  repondreQuestion(q.dataset.question, Number(b.dataset.choix));
+});
 
 // Fenêtre « Revue de la semaine »
 document.addEventListener('click', (e) => {
