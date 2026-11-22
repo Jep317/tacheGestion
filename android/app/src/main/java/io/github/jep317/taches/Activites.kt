@@ -365,6 +365,10 @@ class DetailActivity : Activity() {
         fait.setOnClickListener { changer("fait", if (estNote) "Archivée." else "Fait.") }
         enCours.setOnClickListener { changer("en_cours", "Marqué en cours.") }
 
+        // Priorité : monter / descendre / en tête, ou changer d'horizon. La fenêtre reste ouverte pour enchaîner.
+        val bloc = findViewById<View>(R.id.bloc_priorite)
+        if (estNote) bloc.visibility = View.GONE else preparerPriorite(id)
+
         // Échéance et répétition se règlent dans l'appli complète, ouverte directement sur cette tâche.
         findViewById<Button>(R.id.btn_planifier).setOnClickListener {
             ouvrirAppliWeb(this, "?item=" + Uri.encode(id))
@@ -374,6 +378,65 @@ class DetailActivity : Activity() {
             Rappels.demanderPermission(this)
             choisirRappel(id)
         }
+    }
+
+    private val horizons = listOf(
+        "maintenant" to R.id.h_maintenant, "bientot" to R.id.h_bientot,
+        "plus_tard" to R.id.h_plus_tard, "un_jour" to R.id.h_un_jour,
+    )
+    private val nomsHorizons = mapOf("maintenant" to "Maintenant", "bientot" to "Bientôt", "plus_tard" to "Plus tard", "un_jour" to "Un jour")
+    private var horizonActuel: String? = null
+    private var aBouge = false
+
+    private fun preparerPriorite(id: String) {
+        val position = findViewById<TextView>(R.id.position)
+        val boutons = listOf(R.id.btn_tete, R.id.btn_monter, R.id.btn_descendre).map { findViewById<Button>(it) } +
+            horizons.map { findViewById<Button>(it.second) }
+        fun afficher(p: Supabase.Place?) {
+            horizonActuel = p?.horizon
+            position.text = if (p == null) "Pas encore rangée : choisis un horizon."
+            else "${if (p.rang == 1) "1re" else "${p.rang}e"} sur ${p.total} dans ${nomsHorizons[p.horizon] ?: p.horizon}"
+            val rangee = p != null
+            findViewById<Button>(R.id.btn_tete).isEnabled = rangee && p!!.rang > 1
+            findViewById<Button>(R.id.btn_monter).isEnabled = rangee && p!!.rang > 1
+            findViewById<Button>(R.id.btn_descendre).isEnabled = rangee && p!!.rang < p.total
+            for ((cle, vue) in horizons) {
+                val b = findViewById<Button>(vue)
+                b.isEnabled = cle != p?.horizon
+                b.alpha = if (cle == p?.horizon) 0.45f else 1f
+            }
+        }
+        fun bouger(horizon: String?, mode: String) {
+            val h = horizon ?: horizonActuel ?: return
+            boutons.forEach { it.isEnabled = false }
+            var place: Supabase.Place? = null
+            enFond({ place = Supabase.deplacer(this, id, h, mode) }) { erreur ->
+                if (erreur == null) {
+                    aBouge = true
+                    afficher(place)
+                } else {
+                    afficher(null)
+                    Toast.makeText(this, "Déplacement impossible : " + (erreur.message ?: "erreur"), Toast.LENGTH_LONG).show()
+                    enFond({ place = Supabase.place(this, id) }) { afficher(place) }
+                }
+            }
+        }
+        boutons.forEach { it.isEnabled = false }
+        position.text = "…"
+        var place: Supabase.Place? = null
+        enFond({ place = Supabase.place(this, id) }) { e ->
+            if (e == null) afficher(place) else { position.text = "Position indisponible (hors ligne ?)" }
+        }
+        findViewById<Button>(R.id.btn_tete).setOnClickListener { bouger(null, "tete") }
+        findViewById<Button>(R.id.btn_monter).setOnClickListener { bouger(null, "monter") }
+        findViewById<Button>(R.id.btn_descendre).setOnClickListener { bouger(null, "descendre") }
+        for ((cle, vue) in horizons) findViewById<Button>(vue).setOnClickListener { bouger(cle, "fin") }
+    }
+
+    override fun onDestroy() {
+        // Le widget se redessine une fois, en quittant, avec le nouvel ordre.
+        if (aBouge) WidgetTaches.actualiser(this)
+        super.onDestroy()
     }
 
     private fun choisirRappel(id: String) {
