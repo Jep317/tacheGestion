@@ -432,3 +432,23 @@ body.glisse-en-cours, body.glisse-en-cours * { cursor: grabbing !important; -web
 .zone-suppr { padding-top: 8px; border-top: 1px dashed var(--ligne); text-align: right; }
 .lien-suppr { background: none; border: 0; padding: 2px 0; font-size: 13px; color: var(--discret); }
 .lien-suppr:hover { color: var(--alerte); text-decoration: underline; }
+
+/* Titre et texte modifiables directement dans la fiche ouverte */
+.item.ouvert { position: relative; }
+.item.ouvert .corps { padding-right: 26px; }
+.titre-edit, .description-edit {
+  display: block; width: 100%; resize: none; overflow: hidden; font: inherit; color: var(--texte);
+  background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 2px 6px; margin: -3px -7px;
+  width: calc(100% + 14px); line-height: inherit; cursor: text;
+}
+.titre-edit { font-weight: 600; font-size: 17px; }
+.description-edit { font-size: 15.5px; line-height: 1.55; min-height: 2.2em; }
+.description-edit.note { min-height: 5em; }
+.titre-edit:hover, .description-edit:hover { border-color: var(--ligne); }
+.titre-edit:focus, .description-edit:focus { outline: none; border-color: var(--accent); background: var(--fond); }
+.description-edit::placeholder, .titre-edit::placeholder { color: var(--discret); font-style: italic; }
+.fermer-fiche {
+  position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; padding: 0; border-radius: 50%;
+  border: 0; background: none; color: var(--discret); font-size: 16px; line-height: 1;
+}
+.fermer-fiche:hover { color: var(--texte); background: var(--ligne); }
