@@ -108,7 +108,26 @@ input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 
 .c4 { color: var(--c4); } .c5 { color: var(--c5); } .c6 { color: var(--c6); } .c7 { color: var(--c7); }
 .choix-cat { display: inline-flex; gap: 8px; align-items: center; }
 select { font: inherit; font-size: 14px; color: var(--texte); background: var(--carte); border: 1px solid var(--ligne); border-radius: 8px; padding: 4px 6px; }
-.tag.echeance { color: var(--alerte); border-color: currentColor; }
+.tag.echeance { color: var(--accent); border-color: currentColor; }
+.tag.echeance.aujourdhui { font-weight: 600; }
+.tag.echeance.retard { color: var(--alerte); font-weight: 600; }
+
+/* Échéance, répétition et rappels (dans le détail d'une tâche) */
+.planif { white-space: normal; display: grid; gap: 6px; margin: 8px 0 4px; padding-top: 8px; border-top: 1px dashed var(--ligne); color: var(--texte); }
+.ligne-planif { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ligne-planif .etiquette { min-width: 72px; color: var(--discret); }
+.ligne-planif input[type=date], .ligne-planif input[type=time], .ligne-planif input[type=datetime-local] { width: auto; padding: 4px 6px; border-radius: 8px; font-size: 14px; }
+.ligne-planif input:disabled { opacity: .45; }
+.ligne-planif .nombre { width: 4.2em; padding: 4px 6px; border-radius: 8px; font-size: 14px; }
+.ligne-planif .lien { padding: 2px 6px; }
+.ligne-planif.jours { padding-left: 78px; gap: 4px; }
+.ligne-planif.indente { padding-left: 78px; }
+.jour { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--ligne); background: var(--carte); font-size: 13px; padding: 0; }
+.jour[aria-pressed="true"] { background: var(--accent); color: var(--accent-texte); border-color: var(--accent); }
+.coche { display: inline-flex; gap: 6px; align-items: center; padding-left: 78px; color: var(--discret); }
+.coche input { width: auto; }
+.rappels { list-style: none; margin: 0; padding: 0 0 0 78px; display: grid; gap: 2px; }
+.rappels .lien { padding: 0 6px; }
 .item .details { grid-column: 2; font-size: 14px; color: var(--discret); white-space: pre-wrap; overflow-wrap: anywhere; }
 .item .details p { margin: 4px 0; }
 

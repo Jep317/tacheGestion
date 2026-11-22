@@ -30,6 +30,8 @@ object Supabase {
         val theme: String?,
         val projet: String?,
         val echeance: String?,
+        val echeanceHeure: String? = null,
+        val recurrent: Boolean = false,
     ) {
         val libelle: String get() = titre?.takeIf { it.isNotBlank() } ?: texteBrut
     }
@@ -135,7 +137,7 @@ object Supabase {
 
     // ---------- données ----------
     fun lireListe(ctx: Context): List<Item> {
-        val chemin = "/rest/v1/items?select=id,texte_brut,titre,details,type,categorie:categories(nom),horizon,etat,theme,projet,echeance" +
+        val chemin = "/rest/v1/items?select=id,texte_brut,titre,details,type,categorie:categories(nom),horizon,etat,theme,projet,echeance,echeance_heure,recurrence" +
             "&etat=in.(a_trier,a_faire,en_cours)&order=ordre.asc.nullslast,cree_le.asc"
         val texte = requete("GET", chemin, null, jeton(ctx))
         Cache.ecrire(ctx, texte)
@@ -159,6 +161,8 @@ object Supabase {
                 theme = o.chaine("theme"),
                 projet = o.chaine("projet"),
                 echeance = o.chaine("echeance"),
+                echeanceHeure = o.chaine("echeance_heure"),
+                recurrent = o.has("recurrence") && !o.isNull("recurrence"),
             )
         }
     }
@@ -181,6 +185,42 @@ object Supabase {
         )
         if (rep.length() == 0) throw ErreurApi(404, "Élément introuvable")
         journal(j, id, if (nouvelEtat == "fait") "termine" else "modifie", JSONObject().put("etat", ancienEtat), maj)
+    }
+
+    // ---------- rappels (voir Rappels.kt) ----------
+    /** Rappels à venir (et ceux de la dernière heure), avec l'élément lié s'il y en a un. */
+    fun lireRappels(ctx: Context): String {
+        val depuis = URLEncoder.encode(java.time.Instant.now().minusSeconds(3600).toString(), "UTF-8")
+        return requete(
+            "GET",
+            "/rest/v1/rappels?select=id,item_id,titre,texte,quand,item:items(titre,texte_brut,etat,echeance,echeance_heure)" +
+                "&quand=gte.$depuis&order=quand.asc&limit=200",
+            null, jeton(ctx),
+        )
+    }
+
+    /** Un rappel et l'état de son élément, juste avant de notifier (null si le rappel n'existe plus). */
+    fun lireRappel(ctx: Context, id: String): JSONObject? {
+        val t = JSONArray(
+            requete(
+                "GET",
+                "/rest/v1/rappels?select=id,quand,item:items(etat)&id=eq.${URLEncoder.encode(id, "UTF-8")}",
+                null, jeton(ctx),
+            )
+        )
+        return if (t.length() == 0) null else t.getJSONObject(0)
+    }
+
+    fun ajouterRappel(ctx: Context, itemId: String, quand: java.time.Instant) {
+        val j = jeton(ctx)
+        val corps = JSONObject().put("item_id", itemId).put("quand", quand.toString())
+        requete("POST", "/rest/v1/rappels", corps.toString(), j, "return=minimal")
+        journal(j, itemId, "rappel", null, corps)
+    }
+
+    fun reporterRappel(ctx: Context, id: String, quand: java.time.Instant) {
+        val corps = JSONObject().put("quand", quand.toString()).put("relatif_min", JSONObject.NULL)
+        requete("PATCH", "/rest/v1/rappels?id=eq.${URLEncoder.encode(id, "UTF-8")}", corps.toString(), jeton(ctx), "return=minimal")
     }
 
     private fun journal(jeton: String, id: String, action: String, avant: JSONObject?, apres: JSONObject) {

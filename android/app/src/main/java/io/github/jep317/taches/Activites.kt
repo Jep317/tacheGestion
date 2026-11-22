@@ -48,17 +48,31 @@ object Details {
         if (i.type == "idee") m += "Idée"
         if (i.type == "note") m += "Note"
         if (i.etat == "en_cours") m += "En cours"
-        i.echeance?.let { m += dateCourte(it) }
+        i.echeance?.let { m += dateCourte(it) + (i.echeanceHeure?.let { h -> " " + heureCourte(h) } ?: "") }
+        if (i.recurrent) m += "🔁"
         i.theme?.let { m += it }
         i.projet?.let { m += it }
         return m.joinToString(" · ")
     }
 
     private fun dateCourte(iso: String): String = try {
-        val d = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(iso)
-        SimpleDateFormat("d MMM", Locale.FRANCE).format(d!!)
+        val jour = java.time.LocalDate.parse(iso)
+        val auj = java.time.LocalDate.now()
+        when {
+            jour.isBefore(auj) -> SimpleDateFormat("d MMM", Locale.FRANCE).format(SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(iso)!!) + " (en retard)"
+            jour == auj -> "aujourd'hui"
+            jour == auj.plusDays(1) -> "demain"
+            else -> SimpleDateFormat("d MMM", Locale.FRANCE).format(SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(iso)!!)
+        }
     } catch (e: Exception) {
         iso
+    }
+
+    fun heureCourte(h: String): String {
+        val p = h.split(":")
+        if (p.size < 2) return h
+        val hh = p[0].toIntOrNull() ?: return h
+        return if (p[1] == "00") "$hh h" else "$hh h ${p[1]}"
     }
 
     fun intention(i: Supabase.Item): Intent = Intent()
@@ -113,6 +127,8 @@ class MainActivity : Activity() {
         }
 
         setContentView(R.layout.ecran_principal)
+        Rappels.demanderPermission(this)
+        Rappels.programmerSynchro(this)
         findViewById<TextView>(R.id.compte).text = "Connecté : " + (Supabase.email(this) ?: "")
         val g = AppWidgetManager.getInstance(this)
         val poser = findViewById<Button>(R.id.btn_poser)
@@ -267,5 +283,60 @@ class DetailActivity : Activity() {
         }
         fait.setOnClickListener { changer("fait", "Fait.") }
         enCours.setOnClickListener { changer("en_cours", "Marqué en cours.") }
+
+        // Échéance et répétition se règlent dans l'appli complète, ouverte directement sur cette tâche.
+        findViewById<Button>(R.id.btn_planifier).setOnClickListener {
+            ouvrirAppliWeb(this, "?item=" + Uri.encode(id))
+            finish()
+        }
+        findViewById<Button>(R.id.btn_rappel).setOnClickListener {
+            Rappels.demanderPermission(this)
+            choisirRappel(id)
+        }
+    }
+
+    private fun choisirRappel(id: String) {
+        val maintenant = java.time.ZonedDateTime.now()
+        val ceSoir = maintenant.withHour(18).withMinute(0).withSecond(0).withNano(0)
+        val choix = mutableListOf<Pair<String, java.time.ZonedDateTime?>>()
+        choix += "Dans 1 heure" to maintenant.plusHours(1)
+        if (ceSoir.isAfter(maintenant.plusMinutes(5))) choix += "Ce soir à 18 h" to ceSoir
+        choix += "Demain à 8 h" to maintenant.plusDays(1).withHour(8).withMinute(0).withSecond(0).withNano(0)
+        choix += "Choisir le jour et l'heure…" to null
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Me rappeler")
+            .setItems(choix.map { it.first }.toTypedArray()) { _, n ->
+                val quand = choix[n].second
+                if (quand != null) enregistrerRappel(id, quand) else choisirDateHeure(id)
+            }
+            .show()
+    }
+
+    private fun choisirDateHeure(id: String) {
+        val d = java.time.ZonedDateTime.now().plusHours(1)
+        android.app.DatePickerDialog(this, { _, a, m, j ->
+            android.app.TimePickerDialog(this, { _, h, mn ->
+                enregistrerRappel(id, java.time.ZonedDateTime.of(a, m + 1, j, h, mn, 0, 0, java.time.ZoneId.systemDefault()))
+            }, 9, 0, true).show()
+        }, d.year, d.monthValue - 1, d.dayOfMonth).show()
+    }
+
+    private fun enregistrerRappel(id: String, quand: java.time.ZonedDateTime) {
+        if (quand.isBefore(java.time.ZonedDateTime.now())) {
+            Toast.makeText(this, "Cette heure est déjà passée.", Toast.LENGTH_LONG).show()
+            return
+        }
+        enFond({
+            Supabase.ajouterRappel(this, id, quand.toInstant())
+            Rappels.synchroniser(this)
+        }) { erreur ->
+            if (erreur == null) {
+                val texte = java.time.format.DateTimeFormatter.ofPattern("EEEE d MMMM 'à' H'h'mm", Locale.FRANCE).format(quand)
+                Toast.makeText(this, "Rappel $texte.", Toast.LENGTH_LONG).show()
+                finish()
+            } else {
+                Toast.makeText(this, "Rappel impossible : " + (erreur.message ?: "erreur"), Toast.LENGTH_LONG).show()
+            }
+        }
     }
 }
