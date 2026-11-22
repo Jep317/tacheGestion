@@ -32,6 +32,7 @@ const etat = {
   questions: [],             // questions simples de Claude (« c'est dans quelle tâche ? »)          // revue de la semaine : propositions de Claude en attente de réponse
   ouverts: new Set(),        // éléments dont on affiche le détail
   reglages: new Set(),       // fiches dont le panneau « Réglages » est déplié
+  menuAjout: new Set(),      // fiches dont le menu « ＋ » est ouvert
   ajouts: new Map(),         // fiche -> champ d'ajout affiché ('sous', 'check' ou 'note')
   sections: BUREAU ? {} : JSON.parse(lire('sections') || '{}'),
   liens: [],                 // tous les enfants (faits compris) : { id, parent_id, etat, type }, pour la progression « 2/5 »
@@ -584,13 +585,16 @@ function fiche(i, { niveau, cocher, cleOuvert, parent, notes, brut }) {
   // Barre d'actions : ajouts discrets à gauche, réglages à droite.
   const boutons = [];
   if (tache) {
-    if (profondeur(i) + 1 < NIVEAUX_MAX) boutons.push(['sous', '＋ Sous-tâche']);
+    if (profondeur(i) + 1 < NIVEAUX_MAX) boutons.push(['sous', '↳ Sous-tâche']);
     boutons.push(['check', '☑ Checklist'], ['note', '📎 Note']);
   }
   const reglagesOuverts = etat.reglages.has(cleOuvert);
   parties.push(`<div class="barre-fiche">
     ${cocher && i.etat === 'a_faire' ? `<button type="button" class="puce-action" data-action="en_cours" data-id="${i.id}">▶ En cours</button>` : ''}
-    ${boutons.map(([k, t]) => `<button type="button" class="puce-action" data-ajout-ouvrir="${k}" data-cle="${echap(cleOuvert)}" aria-pressed="${ajout === k}">${t}</button>`).join('')}
+    ${boutons.length ? `<span class="menu-ajout">
+      <button type="button" class="puce-action btn-plus" data-menu-ajout="${echap(cleOuvert)}" aria-expanded="${etat.menuAjout.has(cleOuvert)}" aria-label="Ajouter" title="Ajouter une sous-tâche, une checklist ou une note">＋</button>
+      ${etat.menuAjout.has(cleOuvert) ? `<span class="choix-ajout" role="menu">${boutons.map(([k, t]) => `<button type="button" role="menuitem" class="puce-action" data-ajout-ouvrir="${k}" data-cle="${echap(cleOuvert)}">${t}</button>`).join('')}</span>` : ''}
+    </span>` : ''}
     <button type="button" class="puce-action btn-reglages" data-reglages="${echap(cleOuvert)}" aria-expanded="${reglagesOuverts}">⚙ Réglages</button>
   </div>`);
 
@@ -630,12 +634,20 @@ document.addEventListener('click', (e) => {
     if (etat.reglages.has(cle)) document.querySelector(`[data-reglages="${CSS.escape(cle)}"]`)?.closest('.details')?.querySelector('.reglages')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     return;
   }
+  const menu = e.target.closest('[data-menu-ajout]');
+  if (menu) {
+    const cle = menu.dataset.menuAjout;
+    etat.menuAjout.has(cle) ? etat.menuAjout.delete(cle) : etat.menuAjout.add(cle);
+    afficher();
+    return;
+  }
   const aj = e.target.closest('[data-ajout-ouvrir]');
   if (aj) {
     const { cle, ajoutOuvrir: k } = aj.dataset;
-    etat.ajouts.get(cle) === k ? etat.ajouts.delete(cle) : etat.ajouts.set(cle, k);
+    etat.menuAjout.delete(cle);
+    etat.ajouts.set(cle, k);
     afficher();
-    const champ = document.querySelector(`[data-ajout-ouvrir][data-cle="${CSS.escape(cle)}"]`)?.closest('.details')
+    const champ = document.querySelector(`[data-menu-ajout="${CSS.escape(cle)}"]`)?.closest('.details')
       ?.querySelector('.mini-ajout input, .mini-ajout textarea');
     if (etat.ajouts.get(cle)) champ?.focus();
     return;
@@ -650,7 +662,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   const f = e.target.closest?.('.mini-ajout');
   if (!f) return;
-  const cle = f.closest('.details')?.querySelector('[data-ajout-ouvrir]')?.dataset.cle;
+  const cle = f.closest('.details')?.querySelector('[data-menu-ajout]')?.dataset.menuAjout;
   if (cle) { e.target.value = ''; etat.ajouts.delete(cle); afficher(); }
 });
 
