@@ -1,6 +1,6 @@
 // Service worker minimal : rend l'appli installable et l'ouvre même sans réseau.
 // Les fichiers de l'appli sont pris sur le réseau d'abord (pour avoir la dernière version), le cache sert de secours.
-const CACHE = 'taches-v3';
+const CACHE = 'taches-v4';
 const FICHIERS = ['./', './index.html', './style.css', './app.js', './config.js', './vendor/supabase-js-2.45.4.js', './manifest.webmanifest', './icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
