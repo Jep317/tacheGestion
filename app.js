@@ -467,6 +467,16 @@ if (/TachesPanneau\//.test(navigator.userAgent)) {
   masquer.textContent = '—';
   masquer.addEventListener('click', () => window.open('taches://masquer'));
   document.body.append(masquer);
+  // Cadenas (panneau 2 et suivants) : verrouille ou libère la position du panneau.
+  if (/TachesPanneau\/([2-9]|\d\d)/.test(navigator.userAgent)) {
+    const verrou = document.createElement('button');
+    verrou.className = 'btn-verrou';
+    verrou.type = 'button';
+    verrou.title = 'Verrouiller / déverrouiller la position';
+    verrou.setAttribute('aria-label', 'Verrouiller la position du panneau');
+    verrou.addEventListener('click', () => window.open('taches://verrou'));
+    document.body.append(verrou);
+  }
   document.body.classList.add('panneau');
 }
 
