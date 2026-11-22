@@ -33,9 +33,9 @@ private fun Activity.enFond(travail: () -> Unit, ensuite: (Exception?) -> Unit) 
     }
 }
 
-private fun ouvrirAppliWeb(ctx: Context) {
+private fun ouvrirAppliWeb(ctx: Context, parametres: String = "") {
     try {
-        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Supabase.APPLI_WEB)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Supabase.APPLI_WEB + parametres)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     } catch (_: ActivityNotFoundException) {}
 }
 
@@ -43,7 +43,7 @@ private fun ouvrirAppliWeb(ctx: Context) {
 object Details {
     fun meta(i: Supabase.Item): String {
         val m = mutableListOf<String>()
-        if (i.etat != "a_trier") m += if (i.espace == "famille") "Famille" else "Perso"
+        i.categorie?.let { m += it }
         if (i.type == "course") m += "Course"
         if (i.type == "idee") m += "Idée"
         if (i.type == "note") m += "Note"
@@ -129,6 +129,7 @@ class MainActivity : Activity() {
         }
         findViewById<Button>(R.id.btn_ajouter).setOnClickListener { startActivity(Intent(this, AjoutActivity::class.java)) }
         findViewById<Button>(R.id.btn_appli).setOnClickListener { ouvrirAppliWeb(this) }
+        findViewById<Button>(R.id.btn_categories).setOnClickListener { ouvrirAppliWeb(this, "?categories=1") }
         findViewById<Button>(R.id.btn_deconnexion).setOnClickListener {
             enFond({ Supabase.deconnecter(this) }) {
                 WidgetTaches.actualiser(this)

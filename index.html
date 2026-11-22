@@ -31,11 +31,7 @@
         <button role="tab" data-vue="liste" aria-selected="true">Liste</button>
         <button role="tab" data-vue="notes" aria-selected="false">Notes</button>
       </nav>
-      <div class="espaces" role="group" aria-label="Espace">
-        <button data-espace="tout" aria-pressed="true">Tout</button>
-        <button data-espace="perso" aria-pressed="false">Perso</button>
-        <button data-espace="famille" aria-pressed="false">Famille</button>
-      </div>
+      <div id="filtres" class="espaces" role="group" aria-label="Catégories"></div>
     </header>
 
     <main id="contenu">
@@ -55,6 +51,19 @@
     <footer class="pied">
       <button id="btn-deconnexion" class="lien">Se déconnecter</button>
     </footer>
+  </div>
+
+ <div id="dlg-categories" class="voile" hidden>
+    <div class="fenetre" role="dialog" aria-modal="true" aria-labelledby="titre-categories">
+      <h2 id="titre-categories">Catégories</h2>
+      <p class="discret petit">Claude range chaque nouvel élément dans l'une d'elles. Touche un nom pour le modifier.</p>
+      <ul id="liste-categories" class="categories"></ul>
+      <form id="form-categorie" class="ligne-ajout">
+        <input id="nouvelle-categorie" maxlength="40" placeholder="Nouvelle catégorie" autocomplete="off">
+        <button type="submit" class="principal">Ajouter</button>
+      </form>
+      <p class="fin"><button type="button" id="btn-fermer-categories" class="principal">Terminé</button></p>
+    </div>
   </div>
 
   <div id="toast" class="toast" role="status" hidden></div>
