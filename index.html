@@ -67,6 +67,18 @@
     </div>
   </div>
 
+  <div id="dlg-revue" class="voile" hidden>
+    <div class="fenetre" role="dialog" aria-modal="true" aria-labelledby="titre-revue">
+      <h2 id="titre-revue">Revue de la semaine</h2>
+      <p class="discret petit">Claude propose ces changements. Rien ne bouge sans ton accord.</p>
+      <ul id="liste-revue" class="revue"></ul>
+      <p class="fin">
+        <button type="button" id="btn-tout-accepter" class="lien">Tout accepter</button>
+        <button type="button" id="btn-fermer-revue" class="principal">Plus tard</button>
+      </p>
+    </div>
+  </div>
+
   <div id="toast" class="toast" role="status" hidden></div>
 
   <script type="module" src="app.js"></script>
