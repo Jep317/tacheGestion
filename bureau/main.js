@@ -20,6 +20,7 @@ const LARGEUR = 420;
 const CSS_PANNEAU = `
   .entete, .connexion h1 { -webkit-app-region: drag; }
   .entete button, .entete input, .entete a { -webkit-app-region: no-drag; }
+  body.verrouille .entete, body.verrouille .connexion h1 { -webkit-app-region: no-drag; }
   #btn-micro { display: none !important; }
 `;
 
@@ -31,7 +32,7 @@ app.userAgentFallback = app.userAgentFallback
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/[^\x20-\x7e]/g, '') +
   // Marqueur lu par le site : il n'affiche le bouton « masquer » que dans un panneau qui sait le traiter.
-  ' TachesPanneau/1';
+  ' TachesPanneau/2'; // 2 : sait aussi verrouiller la position
 const premiereInstance = app.requestSingleInstanceLock();
 if (!premiereInstance) app.quit();
 
@@ -85,7 +86,7 @@ function creerFenetre({ visible }) {
   fenetre.loadURL(ADRESSE);
 
   fenetre.webContents.on('dom-ready', () => {
-    if (!horsLigne) fenetre.webContents.insertCSS(CSS_PANNEAU);
+    if (!horsLigne) { fenetre.webContents.insertCSS(CSS_PANNEAU); signalerVerrou(); }
   });
   fenetre.webContents.on('did-fail-load', (_e, code, _desc, url, principal) => {
     if (!principal || code === -3) return; // -3 : chargement annulé, sans importance
@@ -98,6 +99,7 @@ function creerFenetre({ visible }) {
   // Liens externes : dans le navigateur habituel, pas dans le panneau.
   fenetre.webContents.setWindowOpenHandler(({ url }) => {
     if (url === 'taches://masquer') fenetre.hide(); // bouton « masquer » du site
+    else if (url === 'taches://verrou') verrouiller(!reglages.verrouille); // bouton cadenas du site
     else if (/^https?:/.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
@@ -118,10 +120,31 @@ function creerFenetre({ visible }) {
   fenetre.on('hide', () => installerMaj());
   fenetre.on('blur', () => installerMaj());
 
+  appliquerVerrou();
   fenetre.once('ready-to-show', () => {
     if (visible === 'actif') { fenetre.show(); fenetre.focus(); }
     else if (visible) fenetre.showInactive();
   });
+}
+
+// Position verrouillée : le panneau ne se déplace ni ne se redimensionne plus, jusqu'au déverrouillage
+// (cadenas en haut du panneau, ou menu de l'icône près de l'horloge).
+function verrouiller(oui) {
+  enregistrer({ verrouille: oui });
+  appliquerVerrou();
+}
+function appliquerVerrou() {
+  if (!fenetre) return;
+  const v = !!reglages.verrouille;
+  fenetre.setMovable(!v);
+  fenetre.setResizable(!v);
+  signalerVerrou();
+}
+// Le site affiche le cadenas fermé ou ouvert, et coupe la zone de déplacement quand c'est verrouillé.
+function signalerVerrou() {
+  if (!fenetre || horsLigne) return;
+  fenetre.webContents.executeJavaScript(
+    `document.body.classList.toggle('verrouille', ${!!reglages.verrouille})`).catch(() => {});
 }
 
 function montrer() {
@@ -172,6 +195,10 @@ function construireMenu() {
       label: 'Lancer au démarrage de Windows', type: 'checkbox', checked: demarreAvecWindows(),
       click: (item) => reglerDemarrage(item.checked),
     }]),
+    {
+      label: 'Verrouiller la position', type: 'checkbox', checked: !!reglages.verrouille,
+      click: (item) => verrouiller(item.checked),
+    },
     { label: 'Remettre le panneau à droite', click: () => { fenetre.setBounds(cadreParDefaut()); montrer(); } },
     { type: 'separator' },
     { label: 'Quitter', click: () => { quitter = true; app.quit(); } },
