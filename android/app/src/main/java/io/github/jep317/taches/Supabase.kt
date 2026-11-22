@@ -32,6 +32,8 @@ object Supabase {
         val echeance: String?,
         val echeanceHeure: String? = null,
         val recurrent: Boolean = false,
+        val prioriteJour: String? = null,   // date (AAAA-MM-JJ) où Claude l'a choisie parmi les priorités du jour
+        val prioriteRang: Int = 0,
     ) {
         val libelle: String get() = titre?.takeIf { it.isNotBlank() } ?: texteBrut
     }
@@ -137,7 +139,7 @@ object Supabase {
 
     // ---------- données ----------
     fun lireListe(ctx: Context): List<Item> {
-        val chemin = "/rest/v1/items?select=id,texte_brut,titre,details,type,categorie:categories(nom),horizon,etat,theme,projet,echeance,echeance_heure,recurrence" +
+        val chemin = "/rest/v1/items?select=id,texte_brut,titre,details,type,categorie:categories(nom),horizon,etat,theme,projet,echeance,echeance_heure,recurrence,priorite_jour,priorite_rang" +
             "&etat=in.(a_trier,a_faire,en_cours)&order=ordre.asc.nullslast,cree_le.asc"
         val texte = requete("GET", chemin, null, jeton(ctx))
         Cache.ecrire(ctx, texte)
@@ -163,6 +165,8 @@ object Supabase {
                 echeance = o.chaine("echeance"),
                 echeanceHeure = o.chaine("echeance_heure"),
                 recurrent = o.has("recurrence") && !o.isNull("recurrence"),
+                prioriteJour = o.chaine("priorite_jour"),
+                prioriteRang = o.optInt("priorite_rang", 0),
             )
         }
     }

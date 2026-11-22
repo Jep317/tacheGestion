@@ -145,6 +145,27 @@ select { font: inherit; font-size: 14px; color: var(--texte); background: var(--
 .ligne-ajout { display: flex; gap: 8px; }
 .fenetre .fin { text-align: right; margin: 14px 0 0; }
 
+/* Résumé du matin */
+.aujourdhui { margin: 12px 0 18px; padding: 12px; border-radius: 16px; background: color-mix(in srgb, var(--accent) 12%, var(--fond)); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--ligne)); }
+.aujourdhui h2 { margin: 0 0 4px; font-size: 18px; color: var(--accent); }
+.item .raison { font-size: 13px; color: var(--discret); margin-top: 1px; }
+
+/* Revue de la semaine */
+.bandeau-revue {
+  display: flex; gap: 6px; align-items: baseline; width: 100%; margin: 12px 0 0; text-align: left;
+  background: var(--carte); border: 1px solid var(--accent); border-radius: var(--rayon); padding: 10px 12px; font-size: 15px;
+}
+.bandeau-revue span { margin-left: auto; color: var(--accent); font-weight: 700; }
+.revue { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
+.proposition { display: flex; gap: 8px; align-items: center; background: var(--carte); border: 1px solid var(--ligne); border-radius: var(--rayon); padding: 8px 10px; transition: opacity .2s; }
+.proposition .corps { flex: 1; min-width: 0; }
+.proposition .titre { overflow-wrap: anywhere; }
+.proposition.traitee { opacity: .4; pointer-events: none; }
+.action-prop { font-size: 14px; font-weight: 600; color: var(--accent); }
+.action-prop.abandonner { color: var(--alerte); }
+.rond.oui { background: var(--accent); color: var(--accent-texte); border: 0; }
+.fenetre .fin { display: flex; justify-content: flex-end; gap: 8px; align-items: center; }
+
 /* Notes */
 #recherche { margin: 8px 0 4px; }
 

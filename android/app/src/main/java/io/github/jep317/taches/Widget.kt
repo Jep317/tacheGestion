@@ -147,6 +147,14 @@ class Fabrique(private val ctx: Context) : RemoteViewsService.RemoteViewsFactory
     private fun construire(items: List<Supabase.Item>): List<Ligne> {
         val res = mutableListOf<Ligne>()
         val listes = setOf("tache", "course")
+        // Résumé du matin : les priorités choisies par Claude pour aujourd'hui (heure de Paris).
+        val jour = java.time.LocalDate.now(java.time.ZoneId.of("Europe/Paris")).toString()
+        val prio = items.filter { it.prioriteJour == jour && (it.etat == "a_faire" || it.etat == "en_cours") }
+            .sortedBy { it.prioriteRang }
+        if (prio.isNotEmpty()) {
+            res += Ligne.Entete("Aujourd'hui", prio.size)
+            prio.forEach { res += Ligne.Tache(it) }
+        }
         val aTrier = items.filter { it.etat == "a_trier" }
         if (aTrier.isNotEmpty()) {
             res += Ligne.Entete("À trier", aTrier.size)

@@ -28,6 +28,7 @@ const etat = {
   filtre: lire('filtre') || 'tout', // 'tout', 'aucune' ou l'id d'une catégorie
   projet: lire('projet') || '',      // '' = tous les projets, '-' = sans projet, sinon le nom du projet (rangé par Claude)
   recherche: '',
+  propositions: [],          // revue de la semaine : propositions de Claude en attente de réponse
   ouverts: new Set(),        // éléments dont on affiche le détail
   sections: BUREAU ? {} : JSON.parse(lire('sections') || '{}'),
 };
@@ -38,6 +39,8 @@ function ecrire(cle, v) { try { localStorage.setItem('taches.' + cle, v); } catc
 function echap(t) {
   return String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+// Date du jour à Paris (AAAA-MM-JJ), celle qu'utilise Claude pour les priorités du jour.
+function aujourdhui() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date()); }
 function dateCourte(d) {
   return new Date(d + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 }
@@ -74,6 +77,7 @@ function afficherSelonSession(session) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'items' }, charger)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, charger)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rappels' }, charger)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'propositions' }, charger)
       .subscribe();
     actionsDeLancement();
   } else if (!connecte && abonnement) {
@@ -113,13 +117,15 @@ function traduireErreur(err) {
 
 // ---------- données ----------
 async function charger() {
-  const [items, cats, rappels] = await Promise.all([
+  const [items, cats, props, rappels] = await Promise.all([
     sb.from('items')
-      .select('id, texte_brut, titre, details, type, categorie_id, horizon, etat, theme, projet, ordre, echeance, echeance_heure, recurrence, cree_le')
+      .select('id, texte_brut, titre, details, type, categorie_id, horizon, etat, theme, projet, ordre, echeance, echeance_heure, recurrence, cree_le, priorite_jour, priorite_rang, priorite_raison')
       .in('etat', ['a_trier', 'a_faire', 'en_cours'])
       .order('ordre', { ascending: true, nullsFirst: false })
       .order('cree_le', { ascending: true }),
     sb.from('categories').select('id, nom, ordre').order('ordre').order('nom'),
+    sb.from('propositions').select('id, item_id, action, changements, raison, revue')
+      .eq('statut', 'en_attente').order('cree_le'),
     sb.from('rappels').select('id, item_id, titre, texte, quand, relatif_min')
       .gte('quand', new Date(Date.now() - 3600e3).toISOString()).order('quand'),
   ]);
@@ -129,10 +135,14 @@ async function charger() {
   etat.categories = cats.data;
   etat.rappels = rappels.data;
   planifierNotifications();
+  // Les propositions ne sont pas bloquantes : si la table manque, on affiche quand même la liste.
+  etat.propositions = (props.data || []).filter((p) => etat.items.some((i) => i.id === p.item_id));
   if (etat.filtre !== 'tout' && etat.filtre !== 'aucune' && !categorie(etat.filtre)) etat.filtre = 'tout';
   afficherFiltres();
   afficher();
   if (!$('#dlg-categories').hidden) afficherGestion();
+  if (!$('#dlg-revue').hidden) afficherRevue();
+  if (revueDemandee) { revueDemandee = false; if (etat.propositions.length) ouvrirRevue(); }
   if (itemDemande) montrerItem(itemDemande);
 }
 
@@ -309,7 +319,7 @@ function choisirProjet(p) {
   afficher();
 }
 
-function carte(i, { cocher = true } = {}) {
+function carte(i, { cocher = true, raison = '' } = {}) {
   const brut = !i.titre;
   const ouvert = etat.ouverts.has(i.id);
   const tags = [];
@@ -343,6 +353,7 @@ function carte(i, { cocher = true } = {}) {
     ${cocher ? `<button class="case" data-action="fait" data-id="${i.id}" aria-label="Marquer comme fait" title="Fait"></button>` : '<span></span>'}
     <div class="corps" data-action="ouvrir" data-id="${i.id}">
       <div class="titre">${echap(i.titre || i.texte_brut)}</div>
+      ${raison ? `<div class="raison">${echap(raison)}</div>` : ''}
       ${tags.length ? `<div class="meta">${tags.join('')}</div>` : ''}
     </div>
     ${detail}
@@ -357,6 +368,67 @@ function section(cle, nom, items, ouvertParDefaut, classe = '') {
   </details>`;
 }
 
+// ---------- résumé du matin : les 3 priorités choisies par Claude ----------
+function blocAujourdhui() {
+  const jour = aujourdhui();
+  const prio = etat.items
+    .filter((i) => i.priorite_jour === jour && (i.etat === 'a_faire' || i.etat === 'en_cours'))
+    .sort((a, b) => (a.priorite_rang ?? 9) - (b.priorite_rang ?? 9));
+  if (!prio.length) return '';
+  return `<section class="aujourdhui">
+    <h2>Aujourd'hui</h2>
+    <ul class="items">${prio.map((i) => carte(i, { raison: i.priorite_raison })).join('')}</ul>
+  </section>`;
+}
+
+// ---------- revue de la semaine ----------
+const NOMS_HORIZONS = Object.fromEntries(HORIZONS.map((h) => [h.cle, h.nom]));
+function libelleProposition(p) {
+  const c = p.changements || {};
+  if (p.action === 'abandonner') return 'Abandonner';
+  const morceaux = [];
+  if (c.horizon) morceaux.push('→ ' + (NOMS_HORIZONS[c.horizon] || c.horizon));
+  if (c.echeance) morceaux.push('pour le ' + dateCourte(c.echeance));
+  return (p.action === 'planifier' ? 'Planifier ' : 'Reporter ') + morceaux.join(', ');
+}
+
+function bandeauRevue() {
+  const n = etat.propositions.length;
+  if (!n || BUREAU) return '';
+  return `<button class="bandeau-revue" data-revue>
+    <strong>Revue de la semaine</strong> · ${n} proposition${n > 1 ? 's' : ''} de Claude <span aria-hidden="true">›</span>
+  </button>`;
+}
+
+function afficherRevue() {
+  const ps = etat.propositions;
+  $('#liste-revue').innerHTML = ps.length ? ps.map((p) => {
+    const i = etat.items.find((x) => x.id === p.item_id);
+    return `<li class="proposition">
+      <div class="corps">
+        <div class="titre">${echap(i ? i.titre || i.texte_brut : '')}</div>
+        <div class="action-prop ${p.action}">${echap(libelleProposition(p))}</div>
+        <div class="discret petit">${echap(p.raison)}</div>
+      </div>
+      <button class="rond petit oui" data-repondre="${p.id}" data-accepter="1" aria-label="Accepter" title="Accepter">✓</button>
+      <button class="rond petit" data-repondre="${p.id}" data-accepter="0" aria-label="Refuser" title="Refuser">✕</button>
+    </li>`;
+  }).join('') : '<li class="discret">Tout est traité. Merci !</li>';
+  $('#btn-tout-accepter').hidden = ps.length < 2;
+}
+
+function ouvrirRevue() { afficherRevue(); $('#dlg-revue').hidden = false; }
+function fermerRevue() { $('#dlg-revue').hidden = true; }
+
+async function repondre(ids, accepter) {
+  const res = await Promise.all(ids.map((id) => sb.rpc('repondre_proposition', { p_id: id, p_accepter: accepter })));
+  const err = res.find((r) => r.error);
+  if (err) toast('Réponse impossible : ' + err.error.message);
+  else if (ids.length > 1) toast(ids.length + ' propositions acceptées.');
+  await charger();
+  if (!etat.propositions.length) setTimeout(fermerRevue, 900);
+}
+
 function afficher() {
   afficherProjets();
   // Liste par horizon (« À trier » n'a pas encore de projet : on le montre toujours)
@@ -367,6 +439,7 @@ function afficher() {
   for (const h of HORIZONS) {
     html += section(h.cle, h.nom, liste.filter((i) => i.etat !== 'a_trier' && i.horizon === h.cle && TYPES_LISTE.includes(i.type)), h.ouvert);
   }
+  html = bandeauRevue() + blocAujourdhui() + html;
   if (BUREAU) {
     const maintenant = new Date();
     html = `<div class="date-bureau">${maintenant.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</div>` + html;
@@ -406,7 +479,6 @@ const UNITES = { jour: ['jour', 'jours'], semaine: ['semaine', 'semaines'], mois
 function isoJour(d) { // date locale -> 'AAAA-MM-JJ'
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
-function aujourdhui() { return isoJour(new Date()); }
 function dateDe(iso) { return new Date(iso + 'T12:00:00'); }
 function jourSemaine(iso) { return ((dateDe(iso).getDay() + 6) % 7) + 1; }
 function ajouterJours(iso, n) { const d = dateDe(iso); d.setDate(d.getDate() + n); return isoJour(d); }
@@ -669,6 +741,7 @@ function montrerNotif(r, item, cle) {
     n.onclick = () => {
       window.focus();
       if (item) { etat.ouverts.add(item.id); afficher(); }
+      else if (/^revue/i.test(titre) && etat.propositions?.length) ouvrirRevue();
       n.close();
     };
   } catch { /* notifications refusées par le système */ }
@@ -756,6 +829,21 @@ $('#btn-fermer-categories').addEventListener('click', fermerGestion);
 $('#dlg-categories').addEventListener('click', (e) => { if (e.target.id === 'dlg-categories') fermerGestion(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#dlg-categories').hidden) fermerGestion(); });
 
+// Fenêtre « Revue de la semaine »
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-revue]')) ouvrirRevue();
+});
+$('#liste-revue').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-repondre]');
+  if (!b) return;
+  b.closest('li').classList.add('traitee');
+  repondre([b.dataset.repondre], b.dataset.accepter === '1');
+});
+$('#btn-tout-accepter').addEventListener('click', () => repondre(etat.propositions.map((p) => p.id), true));
+$('#btn-fermer-revue').addEventListener('click', fermerRevue);
+$('#dlg-revue').addEventListener('click', (e) => { if (e.target.id === 'dlg-revue') fermerRevue(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#dlg-revue').hidden) fermerRevue(); });
+
 $('#recherche').addEventListener('input', (e) => { etat.recherche = e.target.value; afficher(); });
 
 // ---------- ajout et dictée ----------
@@ -817,17 +905,24 @@ function montrerItem(id) {
   document.querySelector(`.item[data-id="${id}"]`)?.scrollIntoView({ block: 'center' });
 }
 
+let revueDemandee = false;
 // Raccourcis Android « Ajouter » et « Dicter » (?ajout=1, ?vocal=1)
 function actionsDeLancement() {
   const p = new URLSearchParams(location.search);
   if (p.has('ajout')) saisie.focus();
   if (p.has('vocal')) demarrerDictee();
   if (p.has('categories')) ouvrirGestion();
-  if (p.has('ajout') || p.has('vocal') || p.has('categories') || p.has('item')) history.replaceState(null, '', location.pathname + (BUREAU ? '?bureau=1' : ''));
+  if (p.has('revue')) revueDemandee = true; // ouverte dès que les propositions sont chargées
+  if (p.has('ajout') || p.has('vocal') || p.has('categories') || p.has('revue') || p.has('item')) history.replaceState(null, '', location.pathname + (BUREAU ? '?bureau=1' : ''));
 }
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
+// En fond d'écran, la page reste ouverte des jours : on rafraîchit la date et la liste de temps en temps.
+if (BUREAU) setInterval(() => { charger(); }, 15 * 60 * 1000);
+// Le panneau Windows reste ouvert plusieurs jours : quand la date change, on recharge (nouvelles priorités).
+let jourAffiche = aujourdhui();
+setInterval(() => { if (aujourdhui() !== jourAffiche) { jourAffiche = aujourdhui(); if (abonnement) charger(); } }, 5 * 60 * 1000);
 
 // Panneau Windows (appli « MesTaches », version 1.1.2 et suivantes) : un bouton pour masquer le panneau.
 // Le panneau intercepte l'ouverture de « taches://masquer » ; Ctrl+Alt+T le rappelle.
