@@ -81,13 +81,13 @@ function afficherSelonSession(session) {
   if (connecte && !abonnement) {
     charger();
     abonnement = sb.channel('items')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'items' }, charger)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, charger)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'rappels' }, charger)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'checklist' }, charger)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'propositions' }, charger)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'questions' }, charger)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'articles_courses' }, charger)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'items' }, chargerBientot)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, chargerBientot)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rappels' }, chargerBientot)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'checklist' }, chargerBientot)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'propositions' }, chargerBientot)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'questions' }, chargerBientot)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'articles_courses' }, chargerBientot)
       .subscribe();
     actionsDeLancement();
   } else if (!connecte && abonnement) {
@@ -126,7 +126,13 @@ function traduireErreur(err) {
 }
 
 // ---------- données ----------
+// Plusieurs changements d'affilée (réordonner, renommer un projet) : un seul rechargement.
+let minuteurCharger;
+function chargerBientot() { clearTimeout(minuteurCharger); minuteurCharger = setTimeout(charger, 350); }
+
 async function charger() {
+  // Pendant un glisser-déposer, on ne redessine pas la liste sous le doigt : on recharge au lâcher.
+  if (glisse) { glisse.recharger = true; return; }
   const [items, cats, liens, lignes, props, articles, rappels, questions] = await Promise.all([
     sb.from('items')
       .select('id, texte_brut, titre, details, type, categorie_id, horizon, etat, theme, projet, ordre, echeance, echeance_heure, recurrence, cree_le, parent_id, priorite_jour, priorite_rang, priorite_raison, special')
@@ -173,6 +179,7 @@ async function charger() {
   afficherFiltres();
   afficher();
   if (!$('#dlg-categories').hidden) afficherGestion();
+  if (!$('#dlg-projets').hidden) afficherGestionProjets();
   if (!$('#dlg-revue').hidden) afficherRevue();
   if (revueDemandee) { revueDemandee = false; if (etat.propositions.length) ouvrirRevue(); }
   if (itemDemande) montrerItem(itemDemande);
@@ -494,6 +501,7 @@ function afficherFiltres() {
   $('#filtres').innerHTML = boutons
     .map(([id, nom]) => `<button data-filtre="${id}" aria-pressed="${etat.filtre === id}">${echap(nom)}</button>`)
     .join('') + '<button class="regler" data-gerer aria-label="Gérer les catégories" title="Gérer les catégories">⚙</button>';
+  montrerChoix($('#filtres'));
 }
 
 function choisirFiltre(f) {
@@ -616,7 +624,8 @@ function afficherProjets() {
   if (sans) boutons.push([SANS_PROJET, 'Sans projet']);
   zone.innerHTML = boutons
     .map(([cle, nom]) => `<button data-projet="${echap(cle)}" aria-pressed="${etat.projet === cle}">${echap(nom)}</button>`)
-    .join('');
+    .join('') + '<button class="regler" data-gerer-projets aria-label="Gérer les projets" title="Gérer les projets">⚙</button>';
+  montrerChoix(zone);
 }
 
 function choisirProjet(p) {
@@ -689,6 +698,10 @@ function carte(i, { cocher = true, niveau = 0, contexte = false, raison = '', ar
       const options = [`<option value="">${i.etat === 'a_trier' ? 'Laisser Claude choisir' : 'Sans catégorie'}</option>`]
         .concat(etat.categories.map((c) => `<option value="${c.id}" ${c.id === i.categorie_id ? 'selected' : ''}>${echap(c.nom)}</option>`));
       morceaux.push(`<p><label class="choix-cat">Catégorie <select data-categorie-de="${i.id}">${options.join('')}</select></label></p>`);
+    }
+    if (niveau === 0 && i.etat !== 'a_trier') {
+      morceaux.push(`<p><label class="choix-cat">Projet <input class="champ-projet" list="projets-connus" data-projet-de="${i.id}"
+        value="${echap(i.projet || '')}" maxlength="60" placeholder="${TYPES_NOTES.includes(i.type) ? 'Laisser Claude choisir' : 'Aucun'}" autocomplete="off" enterkeyhint="done"></label></p>`);
     }
     if (cocher) morceaux.push(blocPlanif(i));
     detail = `<div class="details">${morceaux.join('') || '<p>Rien de plus.</p>'}</div>`;
@@ -806,6 +819,7 @@ async function repondre(ids, accepter) {
 
 function afficher() {
   afficherProjets();
+  majListeProjets();
   // Liste par horizon (« À trier » n'a pas encore de projet : on le montre toujours)
   const liste = etat.items.filter((i) => filtreCategorie(i) && (i.etat === 'a_trier' || filtreProjet(i)));
   const aTrier = liste.filter((i) => i.etat === 'a_trier');
@@ -1190,6 +1204,7 @@ document.querySelectorAll('[data-vue]').forEach((b) => b.addEventListener('click
 
 // Filtre par projet : les puces de l'entête et les titres de groupe dans « Notes ».
 document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-gerer-projets]')) { ouvrirGestionProjets(); return; }
   const b = e.target.closest('[data-projet]');
   if (b) choisirProjet(b.dataset.projet);
 });
@@ -1254,6 +1269,12 @@ document.addEventListener('change', (e) => {
   if (par) {
     const item = etat.items.find((i) => i.id === par.dataset.parentDe);
     if (item && (par.value || null) !== item.parent_id) changerParent(item, par.value);
+    return;
+  }
+  const pj = e.target.closest('[data-projet-de]');
+  if (pj) {
+    const item = etat.items.find((i) => i.id === pj.dataset.projetDe);
+    if (item) changerProjet(item, pj.value);
     return;
   }
   const s = e.target.closest('[data-categorie-de]');
@@ -1466,6 +1487,341 @@ if (/TachesPanneau\//.test(navigator.userAgent)) {
     document.body.append(verrou);
   }
   document.body.classList.add('panneau');
+}
+
+// ---------- rangées de pastilles (catégories, projets) : défilement à la molette et en faisant glisser ----------
+// Quand il y a trop de pastilles, la rangée défile : molette (verticale ou horizontale), clic maintenu
+// puis glisser sur le côté, ou le doigt sur téléphone (défilement natif).
+function majBords(zone) {
+  const max = zone.scrollWidth - zone.clientWidth;
+  zone.classList.toggle('deborde-g', zone.scrollLeft > 2);
+  zone.classList.toggle('deborde-d', zone.scrollLeft < max - 2);
+}
+/** Ramène la pastille choisie dans la partie visible de la rangée, seulement quand le choix change
+ *  (un rechargement ne doit pas annuler le défilement fait à la main). */
+function montrerChoix(zone) {
+  const choisi = zone.querySelector('[aria-pressed="true"]');
+  const cle = choisi ? choisi.dataset.filtre ?? choisi.dataset.projet : '';
+  if (choisi && zone.dataset.vu !== cle) {
+    zone.dataset.vu = cle;
+    const g = choisi.offsetLeft - zone.offsetLeft;
+    if (g < zone.scrollLeft) zone.scrollLeft = g - 24;
+    else if (g + choisi.offsetWidth > zone.scrollLeft + zone.clientWidth) zone.scrollLeft = g + choisi.offsetWidth - zone.clientWidth + 24;
+  }
+  majBords(zone);
+}
+function rangeeDefilante(zone) {
+  zone.addEventListener('scroll', () => majBords(zone), { passive: true });
+  zone.addEventListener('wheel', (e) => {
+    if (zone.scrollWidth <= zone.clientWidth) return;
+    const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (!d) return;
+    e.preventDefault();
+    zone.scrollLeft += e.deltaMode === 1 ? d * 30 : d;
+  }, { passive: false });
+  // Souris : clic maintenu et glisser. Un vrai glissement n'est pas un clic sur la pastille.
+  let depart = null;
+  let aGlisse = false;
+  zone.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'mouse' || e.button !== 0 || zone.scrollWidth <= zone.clientWidth) return;
+    depart = { x: e.clientX, gauche: zone.scrollLeft };
+    aGlisse = false;
+  });
+  window.addEventListener('pointermove', (e) => {
+    if (!depart) return;
+    const dx = e.clientX - depart.x;
+    if (!aGlisse && Math.abs(dx) < 5) return;
+    aGlisse = true;
+    zone.classList.add('defile');
+    zone.scrollLeft = depart.gauche - dx;
+  });
+  window.addEventListener('pointerup', () => {
+    if (!depart) return;
+    depart = null;
+    zone.classList.remove('defile');
+  });
+  zone.addEventListener('click', (e) => {
+    if (aGlisse) { e.stopPropagation(); e.preventDefault(); aGlisse = false; }
+  }, true);
+  new ResizeObserver(() => majBords(zone)).observe(zone);
+}
+rangeeDefilante($('#filtres'));
+rangeeDefilante($('#projets'));
+
+// ---------- projets : renommer, fusionner, retirer (Claude les crée ; Jérémie peut corriger) ----------
+/** Tous les projets des éléments en cours (tâches et notes), quel que soit l'onglet. */
+function tousLesProjets() {
+  const vus = new Map();
+  for (const i of etat.items) {
+    const cle = cleProjet(i.projet);
+    if (!cle) continue;
+    const p = vus.get(cle) || { cle, nom: i.projet.trim(), taches: 0, notes: 0 };
+    if (TYPES_NOTES.includes(i.type)) p.notes++; else p.taches++;
+    vus.set(cle, p);
+  }
+  return [...vus.values()].sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+}
+function majListeProjets() {
+  $('#projets-connus').innerHTML = tousLesProjets().map((p) => `<option value="${echap(p.nom)}"></option>`).join('');
+}
+
+/** Change le nom de projet d'un ensemble d'éléments, avec une ligne de journal pour chacun. */
+async function poserProjet(items, nom, action) {
+  if (!items.length) return true;
+  const { error } = await sb.from('items').update({ projet: nom }).in('id', items.map((i) => i.id));
+  if (error) { toast('Modification impossible : ' + error.message); charger(); return false; }
+  await sb.from('journal').insert(items.map((i) => ({ item_id: i.id, action, avant: { projet: i.projet ?? null }, apres: { projet: nom }, par: 'jeremie' })));
+  return true;
+}
+
+async function changerProjet(item, saisi) {
+  let nom = saisi.trim().replace(/\s+/g, ' ') || null;
+  // Même projet qu'un existant (casse près) : on reprend son nom exact pour ne pas créer un doublon.
+  const existant = nom && tousLesProjets().find((p) => p.cle === cleProjet(nom));
+  if (existant) nom = existant.nom;
+  if ((nom || null) === ((item.projet || '').trim() || null)) return;
+  if (await poserProjet([item], nom, 'projet_change')) {
+    toast(nom ? 'Projet : « ' + nom + ' ».' : 'Retiré de son projet.');
+    charger();
+  }
+}
+
+function afficherGestionProjets() {
+  const projets = tousLesProjets();
+  const compte = (p) => [p.taches && `${p.taches} tâche${p.taches > 1 ? 's' : ''}`, p.notes && `${p.notes} note${p.notes > 1 ? 's' : ''}`].filter(Boolean).join(', ');
+  $('#liste-projets').innerHTML = projets.length ? projets.map((p) => `
+    <li>
+      <input value="${echap(p.nom)}" maxlength="60" aria-label="Nom du projet" data-renommer-projet="${echap(p.cle)}">
+      <span class="discret petit compte-projet">${compte(p)}</span>
+      <button class="rond petit" data-retirer-projet="${echap(p.cle)}" aria-label="Supprimer le projet" title="Supprimer le projet">✕</button>
+    </li>`).join('') : '<li class="discret">Aucun projet pour l\'instant.</li>';
+}
+function ouvrirGestionProjets() { afficherGestionProjets(); $('#dlg-projets').hidden = false; }
+function fermerGestionProjets() { $('#dlg-projets').hidden = true; }
+
+async function renommerProjet(cle, saisi) {
+  const nom = saisi.trim().replace(/\s+/g, ' ');
+  const p = tousLesProjets().find((x) => x.cle === cle);
+  if (!p || !nom || nom === p.nom) { afficherGestionProjets(); return; }
+  const cible = tousLesProjets().find((x) => x.cle === cleProjet(nom) && x.cle !== cle);
+  if (cible && !confirm(`« ${cible.nom} » existe déjà. Fusionner « ${p.nom} » dedans ?`)) { afficherGestionProjets(); return; }
+  const nomFinal = cible ? cible.nom : nom;
+  const items = etat.items.filter((i) => cleProjet(i.projet) === cle);
+  if (!(await poserProjet(items, nomFinal, cible ? 'projet_fusionne' : 'projet_renomme'))) return;
+  if (etat.projet === cle) { etat.projet = cleProjet(nomFinal); ecrire('projet', etat.projet); }
+  toast(cible ? `Fusionné dans « ${nomFinal} ».` : `Renommé en « ${nomFinal} ».`);
+  charger();
+}
+
+async function retirerProjet(cle) {
+  const p = tousLesProjets().find((x) => x.cle === cle);
+  if (!p) return;
+  const msg = `Supprimer le projet « ${p.nom} » ? Ses éléments restent dans ta liste, sans projet.`
+    + (p.notes ? ' Claude rangera les notes dans un autre projet au prochain tri.' : '');
+  if (!confirm(msg)) return;
+  const items = etat.items.filter((i) => cleProjet(i.projet) === cle);
+  if (!(await poserProjet(items, null, 'projet_supprime'))) return;
+  if (etat.projet === cle) { etat.projet = ''; ecrire('projet', ''); }
+  toast(`Projet « ${p.nom} » supprimé.`);
+  charger();
+}
+
+$('#liste-projets').addEventListener('change', (e) => {
+  const c = e.target.closest('[data-renommer-projet]');
+  if (c) renommerProjet(c.dataset.renommerProjet, c.value);
+});
+$('#liste-projets').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.matches('[data-renommer-projet]')) e.target.blur();
+});
+$('#liste-projets').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-retirer-projet]');
+  if (b) retirerProjet(b.dataset.retirerProjet);
+});
+$('#btn-fermer-projets').addEventListener('click', fermerGestionProjets);
+$('#dlg-projets').addEventListener('click', (e) => { if (e.target.id === 'dlg-projets') fermerGestionProjets(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#dlg-projets').hidden) fermerGestionProjets(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.matches('[data-projet-de]')) { e.preventDefault(); e.target.blur(); }
+});
+
+// ---------- glisser-déposer des tâches : changer d'horizon ou d'ordre ----------
+// Souris : on attrape une tâche et on la fait glisser. Téléphone : appui long, puis on glisse.
+// Lâchée sur le titre d'une section (même repliée), elle va en tête de cette section.
+const RANGS_HORIZON = { maintenant: 0, bientot: 1, plus_tard: 2, un_jour: 3 };
+let glisse = null; // { item, el, x0, y0, actif, tactile, minuteur, fantome, repere, cible, recharger, ouvrirMinuteur }
+
+function horizonSelonEcheance(echeance) {
+  const jours = Math.round((dateDe(echeance) - dateDe(aujourdhui())) / 86400e3);
+  return jours <= 1 ? 'maintenant' : jours <= 7 ? 'bientot' : jours <= 30 ? 'plus_tard' : 'un_jour';
+}
+
+document.addEventListener('pointerdown', (e) => {
+  if (BUREAU || glisse || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  const el = e.target.closest('#vue-liste .horizon:not(.a-trier) > .items > .item');
+  if (!el || e.target.closest('button, input, select, textarea, a, label, .details')) return;
+  const item = etat.items.find((i) => i.id === el.dataset.id);
+  if (!item || item.etat === 'a_trier') return;
+  glisse = { item, el, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, actif: false, tactile: e.pointerType !== 'mouse', id: e.pointerId };
+  if (glisse.tactile) glisse.minuteur = setTimeout(() => commencerGlisse(), 420);
+});
+
+function commencerGlisse() {
+  const g = glisse;
+  if (!g || g.actif) return;
+  g.actif = true;
+  const r = g.el.getBoundingClientRect();
+  g.dx = g.x0 - r.left;
+  g.dy = g.y0 - r.top;
+  g.fantome = g.el.cloneNode(true);
+  g.fantome.classList.add('fantome');
+  g.fantome.style.width = r.width + 'px';
+  document.body.append(g.fantome);
+  g.repere = document.createElement('li');
+  g.repere.className = 'repere';
+  g.el.classList.add('glisse-origine');
+  document.body.classList.add('glisse-en-cours');
+  window.getSelection?.()?.removeAllRanges();
+  if (g.tactile) navigator.vibrate?.(15);
+  bougerGlisse();
+  defilerAuto();
+}
+
+function annulerGlisse() {
+  const g = glisse;
+  if (!g) return;
+  clearTimeout(g.minuteur);
+  clearTimeout(g.ouvrirMinuteur);
+  g.fantome?.remove();
+  g.repere?.remove();
+  g.el.classList.remove('glisse-origine');
+  document.querySelectorAll('.horizon.cible').forEach((d) => d.classList.remove('cible'));
+  document.body.classList.remove('glisse-en-cours');
+  glisse = null;
+  if (g.recharger) charger();
+}
+
+/** Où la tâche tomberait : { horizon, avant (id) | enTete | fin }. Place le repère. */
+function bougerGlisse() {
+  const g = glisse;
+  g.fantome.style.transform = `translate(${g.x - g.dx}px, ${g.y - g.dy}px)`;
+  const sous = document.elementFromPoint(g.x, g.y);
+  const details = sous?.closest('#vue-liste details.horizon[data-section]:not(.a-trier)');
+  document.querySelectorAll('.horizon.cible').forEach((d) => { if (d !== details) d.classList.remove('cible'); });
+  if (!details) { g.repere.remove(); g.cible = null; clearTimeout(g.ouvrirMinuteur); g.surTitre = null; return; }
+  const horizon = details.dataset.section;
+  const ul = details.querySelector(':scope > .items');
+  const surTitre = !!sous.closest('summary') || !details.open || !ul;
+  if (surTitre) {
+    g.repere.remove();
+    details.classList.add('cible');
+    g.cible = { horizon, enTete: true };
+    // Rester un instant sur une section repliée l'ouvre, pour choisir la place exacte.
+    if (!details.open && g.surTitre !== details) {
+      clearTimeout(g.ouvrirMinuteur);
+      g.ouvrirMinuteur = setTimeout(() => { if (glisse === g) { details.open = true; bougerGlisse(); } }, 700);
+    }
+    g.surTitre = details;
+    return;
+  }
+  clearTimeout(g.ouvrirMinuteur);
+  g.surTitre = null;
+  details.classList.remove('cible');
+  const cartes = [...ul.querySelectorAll(':scope > .item')].filter((c) => c !== g.el);
+  const suivante = cartes.find((c) => { const r = c.getBoundingClientRect(); return g.y < r.top + r.height / 2; });
+  if (suivante) {
+    if (g.repere.nextElementSibling !== suivante) ul.insertBefore(g.repere, suivante);
+    g.cible = { horizon, avant: suivante.dataset.id };
+  } else {
+    if (g.repere.parentNode !== ul || g.repere.nextElementSibling) ul.append(g.repere);
+    g.cible = { horizon, fin: true };
+  }
+}
+
+// Près du haut ou du bas de l'écran, la liste défile toute seule.
+function defilerAuto() {
+  const g = glisse;
+  if (!g || !g.actif) return;
+  const haut = ($('.entete')?.getBoundingClientRect().bottom || 0) + 50;
+  const bas = ($('#form-ajout')?.getBoundingClientRect().top || innerHeight) - 50;
+  const v = g.y < haut ? -Math.min(18, (haut - g.y) / 3 + 2) : g.y > bas ? Math.min(18, (g.y - bas) / 3 + 2) : 0;
+  if (v) { scrollBy(0, v); bougerGlisse(); }
+  requestAnimationFrame(defilerAuto);
+}
+
+document.addEventListener('pointermove', (e) => {
+  const g = glisse;
+  if (!g || e.pointerId !== g.id) return;
+  g.x = e.clientX;
+  g.y = e.clientY;
+  if (!g.actif) {
+    const loin = Math.hypot(g.x - g.x0, g.y - g.y0);
+    if (g.tactile ? loin > 10 : loin > 6) {
+      if (g.tactile) annulerGlisse(); // le doigt bouge avant l'appui long : c'est un défilement
+      else commencerGlisse();
+    }
+    return;
+  }
+  bougerGlisse();
+});
+// Une fois l'appui long passé, le doigt fait glisser la tâche au lieu de faire défiler la page.
+document.addEventListener('touchmove', (e) => { if (glisse?.actif) e.preventDefault(); }, { passive: false });
+document.addEventListener('contextmenu', (e) => { if (glisse) e.preventDefault(); });
+document.addEventListener('pointercancel', (e) => { if (glisse && e.pointerId === glisse.id) annulerGlisse(); });
+document.addEventListener('pointerup', (e) => {
+  const g = glisse;
+  if (!g || e.pointerId !== g.id) return;
+  if (!g.actif) { annulerGlisse(); return; }
+  const cible = g.cible;
+  // Le relâchement ne doit pas ouvrir la fiche de la tâche.
+  const bloquer = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+  document.addEventListener('click', bloquer, { capture: true, once: true });
+  setTimeout(() => document.removeEventListener('click', bloquer, { capture: true }), 50);
+  g.recharger = false;
+  annulerGlisse();
+  if (cible) deplacer(g.item, cible);
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && glisse) annulerGlisse(); });
+
+/** Range la tâche dans l'horizon choisi, à la place choisie, et renumérote l'ordre de cet horizon (1 = en tête). */
+async function deplacer(item, { horizon, avant, enTete }) {
+  const voisins = etat.items.filter((i) => i.id !== item.id && i.horizon === horizon && i.etat !== 'a_trier' && TYPES_LISTE.includes(i.type));
+  let pos = enTete ? 0 : avant ? voisins.findIndex((i) => i.id === avant) : voisins.length;
+  if (pos < 0) pos = voisins.length;
+  voisins.splice(pos, 0, item);
+  const avantDeplacement = { horizon: item.horizon, ordre: item.ordre ?? null };
+  const changes = [];
+  voisins.forEach((i, k) => {
+    const champs = {};
+    if (i.ordre !== k + 1) champs.ordre = k + 1;
+    if (i === item && i.horizon !== horizon) champs.horizon = horizon;
+    if (Object.keys(champs).length) changes.push({ i, champs, ancien: { horizon: i.horizon, ordre: i.ordre ?? null } });
+  });
+  if (!changes.length) return;
+  // Tout de suite à l'écran, puis dans la base.
+  for (const c of changes) Object.assign(c.i, c.champs);
+  etat.items.sort((a, b) => (a.ordre ?? 1e9) - (b.ordre ?? 1e9) || a.cree_le.localeCompare(b.cree_le));
+  if (horizon !== avantDeplacement.horizon) etat.sections[horizon] ??= true;
+  afficher();
+  const res = await Promise.all(changes.map((c) => sb.from('items').update(c.champs).eq('id', c.i.id)));
+  const err = res.find((r) => r.error);
+  if (err) { toast('Déplacement impossible : ' + err.error.message); charger(); return; }
+  await sb.from('journal').insert({ item_id: item.id, action: 'deplace', avant: avantDeplacement, apres: { horizon, ordre: item.ordre }, par: 'jeremie' });
+  const nom = HORIZONS.find((h) => h.cle === horizon)?.nom || horizon;
+  let message = horizon !== avantDeplacement.horizon ? `Déplacée dans « ${nom} ».` : 'Ordre modifié.';
+  if (item.echeance && RANGS_HORIZON[horizon] > RANGS_HORIZON[horizonSelonEcheance(item.echeance)]) {
+    message = `Échéance le ${dateCourte(item.echeance)} : Claude la remontera. Change l'échéance pour la garder ici.`;
+  }
+  toast(message, { nom: 'Annuler', faire: () => annulerDeplacement(changes) });
+}
+
+async function annulerDeplacement(changes) {
+  for (const c of changes) Object.assign(c.i, c.ancien);
+  etat.items.sort((a, b) => (a.ordre ?? 1e9) - (b.ordre ?? 1e9) || a.cree_le.localeCompare(b.cree_le));
+  afficher();
+  await Promise.all(changes.map((c) => sb.from('items').update(c.ancien).eq('id', c.i.id)));
+  const item = changes.find((c) => 'horizon' in c.champs)?.i || changes[0].i;
+  await sb.from('journal').insert({ item_id: item.id, action: 'deplace', apres: { annule: true }, par: 'jeremie' });
+  charger();
 }
 
 demarrer();
