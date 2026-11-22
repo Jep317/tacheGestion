@@ -1,212 +1,251 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Fiche d'une tâche touchée dans le widget (panneau du bas). -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content">
-<LinearLayout
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="20dp">
 
-    <TextView
-        android:id="@+id/titre"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textSize="18sp"
-        android:textStyle="bold" />
-
-    <TextView
-        android:id="@+id/meta"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:textColor="@color/discret"
-        android:textSize="13sp" />
-
-    <TextView
-        android:id="@+id/details"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:textSize="15sp" />
-
-    <TextView
-        android:id="@+id/brut"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:textColor="@color/discret"
-        android:textSize="13sp"
-        android:textStyle="italic" />
-
-    <!-- Priorité : la place de la tâche dans son horizon, réglable à la main. -->
     <LinearLayout
-        android:id="@+id/bloc_priorite"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:paddingStart="20dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="24dp">
+
+        <View
+            android:layout_width="36dp"
+            android:layout_height="4dp"
+            android:layout_gravity="center_horizontal"
+            android:background="@drawable/fond_poignee" />
 
         <TextView
-            android:layout_width="wrap_content"
+            android:id="@+id/titre"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Priorité"
-            android:textColor="@color/accent"
-            android:textSize="13sp"
+            android:layout_marginTop="14dp"
+            android:textColor="@color/texte"
+            android:textSize="20sp"
             android:textStyle="bold" />
 
         <TextView
-            android:id="@+id/position"
+            android:id="@+id/meta"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
+            android:layout_marginTop="4dp"
             android:textColor="@color/discret"
             android:textSize="13sp" />
 
+        <TextView
+            android:id="@+id/details"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:textColor="@color/texte"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/brut"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textColor="@color/discret"
+            android:textSize="13sp"
+            android:textStyle="italic" />
+
+        <!-- Priorité : place dans l'horizon, puis horizon. -->
+        <LinearLayout
+            android:id="@+id/bloc_priorite"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/Rubrique"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Priorité" />
+
+                <TextView
+                    android:id="@+id/position"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:textColor="@color/discret"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btn_tete"
+                    style="@style/Bouton.Pilule"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="⤒ En tête" />
+
+                <Button
+                    android:id="@+id/btn_monter"
+                    style="@style/Bouton.Pilule"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:text="↑ Monter" />
+
+                <Button
+                    android:id="@+id/btn_descendre"
+                    style="@style/Bouton.Pilule"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:text="↓ Descendre" />
+            </LinearLayout>
+
+            <TextView
+                style="@style/Rubrique"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Horizon" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/fond_segments"
+                android:orientation="horizontal"
+                android:padding="3dp">
+
+                <Button
+                    android:id="@+id/h_maintenant"
+                    style="@style/Bouton.Segment"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Maintenant" />
+
+                <Button
+                    android:id="@+id/h_bientot"
+                    style="@style/Bouton.Segment"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Bientôt" />
+
+                <Button
+                    android:id="@+id/h_plus_tard"
+                    style="@style/Bouton.Segment"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Plus tard" />
+
+                <Button
+                    android:id="@+id/h_un_jour"
+                    style="@style/Bouton.Segment"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Un jour" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Échéance et rappel. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
             android:orientation="horizontal">
 
             <Button
-                android:id="@+id/btn_tete"
-                style="?android:attr/buttonBarButtonStyle"
+                android:id="@+id/btn_planifier"
+                style="@style/Bouton.Pilule"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="⤒ En tête" />
+                android:text="📅 Échéance" />
 
             <Button
-                android:id="@+id/btn_monter"
-                style="?android:attr/buttonBarButtonStyle"
+                android:id="@+id/btn_rappel"
+                style="@style/Bouton.Pilule"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
                 android:layout_weight="1"
-                android:text="↑ Monter" />
-
-            <Button
-                android:id="@+id/btn_descendre"
-                style="?android:attr/buttonBarButtonStyle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="↓ Descendre" />
+                android:text="🔔 Me rappeler" />
         </LinearLayout>
 
+        <!-- Actions : « Fait » en principal. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:gravity="center_vertical"
             android:orientation="horizontal">
 
             <Button
-                android:id="@+id/h_maintenant"
-                style="?android:attr/buttonBarButtonStyle"
-                android:layout_width="0dp"
+                android:id="@+id/btn_supprimer"
+                style="@style/Bouton.Lien"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Maintenant"
-                android:textSize="12sp" />
+                android:text="Supprimer"
+                android:textColor="#B23A3A" />
 
             <Button
-                android:id="@+id/h_bientot"
-                style="?android:attr/buttonBarButtonStyle"
-                android:layout_width="0dp"
+                android:id="@+id/btn_fermer"
+                style="@style/Bouton.Lien"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Bientôt"
-                android:textSize="12sp" />
+                android:text="Fermer" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
 
             <Button
-                android:id="@+id/h_plus_tard"
-                style="?android:attr/buttonBarButtonStyle"
-                android:layout_width="0dp"
+                android:id="@+id/btn_en_cours"
+                style="@style/Bouton.Pilule"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Plus tard"
-                android:textSize="12sp" />
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:text="En cours" />
 
             <Button
-                android:id="@+id/h_un_jour"
-                style="?android:attr/buttonBarButtonStyle"
-                android:layout_width="0dp"
+                android:id="@+id/btn_fait"
+                style="@style/Bouton.Principal"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Un jour"
-                android:textSize="12sp" />
+                android:layout_marginStart="8dp"
+                android:text="✓ Fait" />
         </LinearLayout>
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:gravity="end"
-        android:orientation="horizontal">
 
         <Button
-            android:id="@+id/btn_supprimer"
-            style="?android:attr/borderlessButtonStyle"
+            android:id="@+id/btn_appli"
+            style="@style/Bouton.Lien"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Supprimer"
-            android:textColor="#B23A3A" />
-
-        <Button
-            android:id="@+id/btn_fermer"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Fermer" />
-
-        <Button
-            android:id="@+id/btn_en_cours"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="En cours" />
-
-        <Button
-            android:id="@+id/btn_fait"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="✓ Fait"
-            android:textColor="@color/accent"
-            android:textStyle="bold" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="end"
-        android:orientation="horizontal">
-
-        <Button
-            android:id="@+id/btn_planifier"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Échéance, répéter…"
-            android:textSize="13sp" />
-
-        <Button
-            android:id="@+id/btn_rappel"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="🔔 Me rappeler"
-            android:textColor="@color/accent"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="6dp"
+            android:text="Ouvrir dans l'appli complète"
             android:textSize="13sp" />
     </LinearLayout>
-
-    <Button
-        android:id="@+id/btn_appli"
-        style="?android:attr/borderlessButtonStyle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="end"
-        android:text="Voir dans l'appli"
-        android:textColor="@color/discret"
-        android:textSize="12sp" />
-</LinearLayout>
 </ScrollView>

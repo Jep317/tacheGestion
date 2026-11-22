@@ -335,6 +335,9 @@ class DetailActivity : Activity() {
             return
         }
         setContentView(R.layout.ecran_detail)
+        // Panneau en bas de l'écran, sur toute la largeur.
+        window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT)
+        window.setGravity(android.view.Gravity.BOTTOM)
         val etatActuel = intent.getStringExtra("etat") ?: "a_faire"
         findViewById<TextView>(R.id.titre).text = intent.getStringExtra("libelle")
         fun remplir(vue: Int, texte: String?) {
@@ -422,7 +425,7 @@ class DetailActivity : Activity() {
             horizons.map { findViewById<Button>(it.second) }
         fun afficher(p: Supabase.Place?) {
             horizonActuel = p?.horizon
-            position.text = if (p == null) "Pas encore rangée : choisis un horizon."
+            position.text = if (p == null) "Pas encore rangée"
             else "${if (p.rang == 1) "1re" else "${p.rang}e"} sur ${p.total} dans ${nomsHorizons[p.horizon] ?: p.horizon}"
             val rangee = p != null
             findViewById<Button>(R.id.btn_tete).isEnabled = rangee && p!!.rang > 1
@@ -430,8 +433,15 @@ class DetailActivity : Activity() {
             findViewById<Button>(R.id.btn_descendre).isEnabled = rangee && p!!.rang < p.total
             for ((cle, vue) in horizons) {
                 val b = findViewById<Button>(vue)
-                b.isEnabled = cle != p?.horizon
-                b.alpha = if (cle == p?.horizon) 0.45f else 1f
+                // Segment choisi : plein, en couleur d'accent ; les autres restent touchables.
+                val choisi = cle == p?.horizon
+                b.isEnabled = !choisi
+                b.setBackgroundResource(if (choisi) R.drawable.fond_segment_actif else android.R.color.transparent)
+                b.setTextColor(getColor(if (choisi) R.color.accent_texte else R.color.texte))
+            }
+            for (vue in listOf(R.id.btn_tete, R.id.btn_monter, R.id.btn_descendre)) {
+                val b = findViewById<Button>(vue)
+                b.alpha = if (b.isEnabled) 1f else 0.4f
             }
         }
         fun bouger(horizon: String?, mode: String) {
