@@ -1065,8 +1065,16 @@ function afficher() {
     const ordre = [...groupes.entries()].sort(([a, ga], [b, gb]) => (!a) - (!b) || ga.nom.localeCompare(gb.nom, 'fr'));
     htmlNotes = ordre.length === 1 && !ordre[0][0]
       ? `<ul class="items">${notes.map((i) => carte(i, { cocher: false })).join('')}</ul>`
-      : ordre.map(([cle, g]) => `<h3 class="groupe-projet"><button class="lien" data-projet="${echap(cle || SANS_PROJET)}">${echap(g.nom)}</button> <span class="compte">${g.notes.length}</span></h3>
-        <ul class="items">${g.notes.map((i) => carte(i, { cocher: false })).join('')}</ul>`).join('');
+      // Repliés par défaut : juste le nom du projet et le nombre de notes ; un clic déplie (mémorisé).
+      // Pendant une recherche, tout est déplié.
+      : ordre.map(([cle, g]) => {
+        const k = 'notes:' + (cle || SANS_PROJET);
+        const ouvert = q || g.notes.some((n) => etat.ouverts.has(n.id)) || (etat.sections[k] ?? false);
+        return `<details class="groupe-projet" data-section="${echap(k)}" ${ouvert ? 'open' : ''}>
+          <summary><span class="nom">${echap(g.nom)}</span> <span class="compte">${g.notes.length}</span></summary>
+          <ul class="items">${g.notes.map((i) => carte(i, { cocher: false })).join('')}</ul>
+        </details>`;
+      }).join('');
   }
   $('#liste-notes').innerHTML = htmlNotes;
   afficherCourses();
@@ -1455,11 +1463,20 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('toggle', (e) => {
   const d = e.target;
-  if (d.matches?.('details[data-section]')) {
+  if (d.matches?.('details[data-section]') && !d.dataset.section.startsWith('notes:')) {
     etat.sections[d.dataset.section] = d.open;
     if (!BUREAU) ecrire('sections', JSON.stringify(etat.sections));
   }
 }, true);
+
+// Groupes de notes par projet : on ne retient que ce que Jérémie déplie ou replie lui-même.
+document.addEventListener('click', (e) => {
+  const sum = e.target.closest('details.groupe-projet > summary');
+  if (!sum) return;
+  const d = sum.parentElement;
+  etat.sections[d.dataset.section] = !d.open;
+  ecrire('sections', JSON.stringify(etat.sections));
+});
 
 document.querySelectorAll('[data-vue]').forEach((b) => b.addEventListener('click', () => {
   etat.vue = b.dataset.vue;
