@@ -97,6 +97,20 @@
             android:src="@drawable/ic_ajouter" />
     </LinearLayout>
 
+    <!-- Filtre catégorie / projet (toucher pour choisir), mémorisé par widget. -->
+    <TextView
+        android:id="@+id/filtre"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:paddingStart="4dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
+        android:text="Filtrer : tout ▾"
+        android:textColor="@color/accent"
+        android:textSize="12sp" />
+
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
