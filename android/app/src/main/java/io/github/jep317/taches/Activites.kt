@@ -85,6 +85,7 @@ object Details {
         .putExtra("details", i.details)
         .putExtra("meta", meta(i))
         .putExtra("etat", i.etat)
+        .putExtra("type", i.type)
 }
 
 // ---------- Écran principal : connexion, puis raccourcis ----------
@@ -272,7 +273,9 @@ class DetailActivity : Activity() {
 
         val fait = findViewById<Button>(R.id.btn_fait)
         val enCours = findViewById<Button>(R.id.btn_en_cours)
-        if (etatActuel == "en_cours") enCours.visibility = View.GONE
+        val estNote = intent.getStringExtra("type") in setOf("note", "idee")
+        if (etatActuel == "en_cours" || estNote) enCours.visibility = View.GONE
+        if (estNote) fait.text = "Archiver"
         findViewById<Button>(R.id.btn_fermer).setOnClickListener { finish() }
         findViewById<Button>(R.id.btn_appli).setOnClickListener { ouvrirAppliWeb(this); finish() }
 
@@ -291,7 +294,7 @@ class DetailActivity : Activity() {
                 }
             }
         }
-        fait.setOnClickListener { changer("fait", "Fait.") }
+        fait.setOnClickListener { changer("fait", if (estNote) "Archivée." else "Fait.") }
         enCours.setOnClickListener { changer("en_cours", "Marqué en cours.") }
 
         // Échéance et répétition se règlent dans l'appli complète, ouverte directement sur cette tâche.

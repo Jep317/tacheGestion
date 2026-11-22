@@ -26,11 +26,47 @@ class WidgetTaches : AppWidgetProvider() {
     }
 
     override fun onReceive(ctx: Context, intent: Intent) {
-        if (intent.action == ACTUALISER) actualiser(ctx) else super.onReceive(ctx, intent)
+        when (intent.action) {
+            ACTUALISER -> actualiser(ctx)
+            ONGLET -> {
+                val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+                if (id != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                    choisirOnglet(ctx, id, intent.getStringExtra("onglet") ?: TACHES)
+                    val g = AppWidgetManager.getInstance(ctx)
+                    g.updateAppWidget(id, vues(ctx, id))
+                    g.notifyAppWidgetViewDataChanged(intArrayOf(id), R.id.liste)
+                }
+            }
+            else -> super.onReceive(ctx, intent)
+        }
+    }
+
+    override fun onDeleted(ctx: Context, ids: IntArray) {
+        val e = ctx.getSharedPreferences("widget", Context.MODE_PRIVATE).edit()
+        for (id in ids) e.remove("onglet_$id")
+        e.apply()
     }
 
     companion object {
         const val ACTUALISER = "io.github.jep317.taches.ACTUALISER"
+        const val ONGLET = "io.github.jep317.taches.ONGLET"
+        const val TACHES = "taches"
+        const val NOTES = "notes"
+
+        /** Onglet affiché par un widget posé : « taches » ou « notes ». */
+        fun onglet(ctx: Context, id: Int): String =
+            ctx.getSharedPreferences("widget", Context.MODE_PRIVATE).getString("onglet_$id", TACHES) ?: TACHES
+
+        private fun choisirOnglet(ctx: Context, id: Int, onglet: String) =
+            ctx.getSharedPreferences("widget", Context.MODE_PRIVATE).edit().putString("onglet_$id", onglet).commit()
+
+        private fun versOnglet(ctx: Context, id: Int, onglet: String): PendingIntent {
+            val i = Intent(ctx, WidgetTaches::class.java).setAction(ONGLET)
+                .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+                .putExtra("onglet", onglet)
+            i.data = Uri.parse("taches://onglet/$id/$onglet") // un PendingIntent distinct par widget et par onglet
+            return PendingIntent.getBroadcast(ctx, 0, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        }
 
         private fun ids(ctx: Context): IntArray =
             AppWidgetManager.getInstance(ctx).getAppWidgetIds(ComponentName(ctx, WidgetTaches::class.java))
@@ -75,7 +111,13 @@ class WidgetTaches : AppWidgetProvider() {
             // Toucher une ligne : détail de la tâche (ou l'appli complète pour les lignes de résumé).
             v.setPendingIntentTemplate(R.id.liste, activite(ctx, 10, Intent(ctx, DetailActivity::class.java), modifiable = true))
 
-            v.setOnClickPendingIntent(R.id.titre, activite(ctx, 1, Intent(Intent.ACTION_VIEW, Uri.parse(Supabase.APPLI_WEB))))
+            val notes = onglet(ctx, id) == NOTES
+            val actif = ctx.getColor(R.color.texte)
+            val inactif = ctx.getColor(R.color.discret)
+            v.setTextColor(R.id.onglet_taches, if (notes) inactif else actif)
+            v.setTextColor(R.id.onglet_notes, if (notes) actif else inactif)
+            v.setOnClickPendingIntent(R.id.onglet_taches, versOnglet(ctx, id, TACHES))
+            v.setOnClickPendingIntent(R.id.onglet_notes, versOnglet(ctx, id, NOTES))
             v.setOnClickPendingIntent(R.id.vide, activite(ctx, 2, Intent(ctx, MainActivity::class.java)))
             v.setOnClickPendingIntent(R.id.btn_ajouter, activite(ctx, 3, Intent(ctx, AjoutActivity::class.java)))
             v.setOnClickPendingIntent(
@@ -95,11 +137,12 @@ class WidgetTaches : AppWidgetProvider() {
 }
 
 class ServiceListe : RemoteViewsService() {
-    override fun onGetViewFactory(intent: Intent): RemoteViewsFactory = Fabrique(applicationContext)
+    override fun onGetViewFactory(intent: Intent): RemoteViewsFactory =
+        Fabrique(applicationContext, intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID))
 }
 
 /** Construit les lignes de la liste du widget. Appelée sur un fil de fond : le réseau y est permis. */
-class Fabrique(private val ctx: Context) : RemoteViewsService.RemoteViewsFactory {
+class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteViewsService.RemoteViewsFactory {
 
     private sealed class Ligne {
         class Entete(val nom: String, val compte: Int) : Ligne()
@@ -143,7 +186,26 @@ class Fabrique(private val ctx: Context) : RemoteViewsService.RemoteViewsFactory
             }
             Supabase.analyser(cache)
         }
-        lignes = construire(items)
+        lignes = if (WidgetTaches.onglet(ctx, widgetId) == WidgetTaches.NOTES) construireNotes(items) else construire(items)
+    }
+
+    /** Onglet Notes : notes et idées rangées par projet, comme l'onglet Notes de l'appli. */
+    private fun construireNotes(items: List<Supabase.Item>): List<Ligne> {
+        val notes = items.filter { it.type == "note" || it.type == "idee" }
+        if (notes.isEmpty()) return listOf(Ligne.Info("Pas encore de notes. Dicte par exemple « note : code du portail 1234 », Claude la rangera ici."))
+        val res = mutableListOf<Ligne>()
+        val groupes = notes.groupBy { it.projet?.takeIf { p -> p.isNotBlank() } }
+        val noms = groupes.keys.filterNotNull().sortedBy { it.lowercase(Locale.FRANCE) }
+        for (nom in noms) {
+            val g = groupes.getValue(nom)
+            res += Ligne.Entete(nom, g.size)
+            g.forEach { res += Ligne.Tache(it) }
+        }
+        groupes[null]?.let { g ->
+            res += Ligne.Entete(if (noms.isEmpty()) "Notes et idées" else "Sans projet", g.size)
+            g.forEach { res += Ligne.Tache(it) }
+        }
+        return res
     }
 
     private fun construire(items: List<Supabase.Item>): List<Ligne> {
