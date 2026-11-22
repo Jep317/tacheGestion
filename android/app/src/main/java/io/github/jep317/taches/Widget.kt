@@ -43,7 +43,7 @@ class WidgetTaches : AppWidgetProvider() {
 
     override fun onDeleted(ctx: Context, ids: IntArray) {
         val e = ctx.getSharedPreferences("widget", Context.MODE_PRIVATE).edit()
-        for (id in ids) e.remove("onglet_$id").remove("cat_$id").remove("proj_$id")
+        for (id in ids) e.remove("onglet_$id").remove("cat_$id").remove("proj_$id").remove("ouverts_$id")
         e.apply()
     }
 
@@ -56,6 +56,18 @@ class WidgetTaches : AppWidgetProvider() {
         /** Onglet affiché par un widget posé : « taches » ou « notes ». */
         fun onglet(ctx: Context, id: Int): String =
             ctx.getSharedPreferences("widget", Context.MODE_PRIVATE).getString("onglet_$id", TACHES) ?: TACHES
+
+        /** Sujets et groupes de notes dépliés dans un widget (repliés par défaut). */
+        fun sectionsOuvertes(ctx: Context, id: Int): Set<String> =
+            ctx.getSharedPreferences("widget", Context.MODE_PRIVATE).getStringSet("ouverts_$id", emptySet()) ?: emptySet()
+
+        fun basculerSection(ctx: Context, id: Int, cle: String) {
+            val p = ctx.getSharedPreferences("widget", Context.MODE_PRIVATE)
+            val s = (p.getStringSet("ouverts_$id", emptySet()) ?: emptySet()).toMutableSet()
+            if (!s.remove(cle)) s += cle
+            p.edit().putStringSet("ouverts_$id", s).commit()
+            AppWidgetManager.getInstance(ctx).notifyAppWidgetViewDataChanged(intArrayOf(id), R.id.liste)
+        }
 
         /** Filtre d'un widget : catégorie (nom, ou "" = sans catégorie) et projet ; null = pas de filtre. */
         fun filtreCategorie(ctx: Context, id: Int): String? =
@@ -124,7 +136,7 @@ class WidgetTaches : AppWidgetProvider() {
             v.setEmptyView(R.id.liste, R.id.vide)
 
             // Toucher une ligne : détail de la tâche (ou l'appli complète pour les lignes de résumé).
-            v.setPendingIntentTemplate(R.id.liste, activite(ctx, 10, Intent(ctx, DetailActivity::class.java), modifiable = true))
+            v.setPendingIntentTemplate(R.id.liste, activite(ctx, 10, Intent(ctx, RouteurActivity::class.java), modifiable = true))
 
             val notes = onglet(ctx, id) == NOTES
             val actif = ctx.getColor(R.color.texte)
@@ -168,7 +180,8 @@ class ServiceListe : RemoteViewsService() {
 class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteViewsService.RemoteViewsFactory {
 
     private sealed class Ligne {
-        class Entete(val nom: String, val compte: Int) : Ligne()
+        /** [cle] non nulle : en-tête repliable (sujet ou groupe de notes), [ouvert] = déplié. */
+        class Entete(val nom: String, val compte: Int, val cle: String? = null, val ouvert: Boolean = true) : Ligne()
         class Tache(val item: Supabase.Item) : Ligne()
         class Info(val texte: String) : Ligne()
         class Courses(val restants: Int) : Ligne()
@@ -222,27 +235,39 @@ class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteView
         }
     }
 
-    /** Onglet Notes : notes et idées rangées par sujet et groupe, comme l'onglet Notes de l'appli. */
+    /** Onglet Notes : notes et idées rangées par sujet et groupe, repliés par défaut (toucher pour déplier). */
     private fun construireNotes(items: List<Supabase.Item>): List<Ligne> {
         val notes = items.filter { it.type == "note" || it.type == "idee" }
         if (notes.isEmpty()) return listOf(Ligne.Info("Pas encore de notes. Dicte par exemple « note : code du portail 1234 », Claude la rangera ici."))
+        val ouverts = WidgetTaches.sectionsOuvertes(ctx, widgetId)
         val res = mutableListOf<Ligne>()
         val groupes = notes.groupBy { it.projet?.takeIf { p -> p.isNotBlank() } }
         val noms = groupes.keys.filterNotNull().sortedBy { it.lowercase(Locale.FRANCE) }
         for (nom in noms) {
             // Sujet, puis ses groupes (sujet › groupe › notes) ; les notes sans groupe d'abord.
             val g = groupes.getValue(nom)
+            val cle = "s:" + nom.lowercase(Locale.FRANCE)
+            val ouvert = cle in ouverts
+            res += Ligne.Entete(nom, g.size, cle, ouvert)
+            if (!ouvert) continue
             val parGroupe = g.groupBy { it.groupe?.trim()?.takeIf { x -> x.isNotEmpty() } }
-            res += Ligne.Entete(nom, g.size)
             parGroupe[null]?.forEach { res += Ligne.Tache(it) }
             parGroupe.keys.filterNotNull().sortedBy { it.lowercase(Locale.FRANCE) }.forEach { gr ->
-                res += Ligne.Entete("$nom › $gr", parGroupe.getValue(gr).size)
-                parGroupe.getValue(gr).forEach { res += Ligne.Tache(it) }
+                val cleG = cle + ">" + gr.lowercase(Locale.FRANCE)
+                val ouvertG = cleG in ouverts
+                res += Ligne.Entete("   $gr", parGroupe.getValue(gr).size, cleG, ouvertG)
+                if (ouvertG) parGroupe.getValue(gr).forEach { res += Ligne.Tache(it) }
             }
         }
         groupes[null]?.let { g ->
-            res += Ligne.Entete(if (noms.isEmpty()) "Notes et idées" else "Sans sujet", g.size)
-            g.forEach { res += Ligne.Tache(it) }
+            if (noms.isEmpty()) {
+                res += Ligne.Entete("Notes et idées", g.size)
+                g.forEach { res += Ligne.Tache(it) }
+            } else {
+                val ouvert = "s:~" in ouverts
+                res += Ligne.Entete("Sans sujet", g.size, "s:~", ouvert)
+                if (ouvert) g.forEach { res += Ligne.Tache(it) }
+            }
         }
         return res
     }
@@ -281,8 +306,14 @@ class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteView
         val l = lignes.getOrNull(position) ?: return RemoteViews(ctx.packageName, R.layout.ligne_info)
         return when (l) {
             is Ligne.Entete -> RemoteViews(ctx.packageName, R.layout.ligne_entete).apply {
-                setTextViewText(R.id.nom, l.nom)
+                setTextViewText(R.id.nom, if (l.cle == null) l.nom else (if (l.ouvert) "▾ " else "▸ ") + l.nom)
                 setTextViewText(R.id.compte, l.compte.toString())
+                if (l.cle != null) {
+                    setOnClickFillInIntent(
+                        R.id.entete,
+                        Intent().putExtra("basculer", l.cle).putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId),
+                    )
+                }
             }
             is Ligne.Info -> RemoteViews(ctx.packageName, R.layout.ligne_info).apply {
                 setTextViewText(R.id.texte, l.texte)
@@ -316,5 +347,26 @@ class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteView
                 }
             }
         }
+    }
+}
+
+/**
+ * Point d'entrée des lignes du widget (activité invisible) : déplier/replier un sujet de notes sur place,
+ * confirmer « terminer », ou ouvrir la fiche.
+ */
+class RouteurActivity : android.app.Activity() {
+    override fun onCreate(etat: android.os.Bundle?) {
+        super.onCreate(etat)
+        val cle = intent.getStringExtra("basculer")
+        val widget = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+        when {
+            cle != null && widget != AppWidgetManager.INVALID_APPWIDGET_ID -> WidgetTaches.basculerSection(this, widget, cle)
+            intent.getStringExtra("action") == "terminer" && intent.getStringExtra("id") != null ->
+                startActivity(Intent(this, ConfirmerActivity::class.java).putExtras(intent))
+            else -> startActivity(Intent(this, DetailActivity::class.java).putExtras(intent))
+        }
+        finish()
+        @Suppress("DEPRECATION")
+        overridePendingTransition(0, 0)
     }
 }
