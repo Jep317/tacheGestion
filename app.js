@@ -32,7 +32,6 @@ const etat = {
   questions: [],             // questions simples de Claude (« c'est dans quelle tâche ? »)          // revue de la semaine : propositions de Claude en attente de réponse
   ouverts: new Set(),        // éléments dont on affiche le détail
   reglages: new Set(),       // fiches dont le panneau « Réglages » est déplié
-  menuAjout: new Set(),      // fiches dont le menu « ＋ » est ouvert
   ajouts: new Map(),         // fiche -> champ d'ajout affiché ('sous', 'check' ou 'note')
   sections: BUREAU ? {} : JSON.parse(lire('sections') || '{}'),
   liens: [],                 // tous les enfants (faits compris) : { id, parent_id, etat, type }, pour la progression « 2/5 »
@@ -505,7 +504,7 @@ async function promouvoirLigne(ligneId) {
 }
 
 /** HTML de la checklist d'un élément, avec ajout rapide (plusieurs lignes d'un coup). */
-function afficherChecklist(itemId, { formulaire = true } = {}) {
+function afficherChecklist(itemId, { formulaire = true, annuler = '' } = {}) {
   const lignes = lignesChecklist(itemId);
   const promouvable = (() => { const i = etat.items.find((x) => x.id === itemId); return i && estTache(i) && profondeur(i) + 1 < NIVEAUX_MAX; })();
   return `<div class="bloc checklist">
@@ -516,8 +515,8 @@ function afficherChecklist(itemId, { formulaire = true } = {}) {
       <button type="button" class="mini" data-check-suppr="${l.id}" title="Supprimer" aria-label="Supprimer">✕</button>
     </li>`).join('')}</ul>` : ''}
     ${formulaire ? `<form class="mini-ajout" data-ajout-check="${itemId}">
-      <input data-garder="check-${itemId}" placeholder="Ajouter des lignes (séparées par des virgules)" autocomplete="off" enterkeyhint="done">
-      <button type="submit" class="mini" aria-label="Ajouter">＋</button>
+      <input data-garder="check-${itemId}" placeholder="Nouvelle ligne (virgule pour plusieurs)" autocomplete="off" enterkeyhint="done">
+      <button type="submit" class="mini" aria-label="Ajouter">＋</button>${annuler}
     </form>` : ''}
     ${lignes.some((l) => l.coche) ? `<button type="button" class="lien petit" data-check-vider="${itemId}">Retirer les lignes cochées</button>` : ''}
   </div>`;
@@ -563,38 +562,44 @@ function fiche(i, { niveau, cocher, cleOuvert, parent, notes, brut }) {
     parties.push(`<p class="dicte" title="Ce que tu as dicté ou écrit">« ${echap(i.texte_brut)} »</p>`);
   }
 
-  // Contenu : checklist et notes attachées, seulement s'il y en a.
+  // Contenu : checklist et notes attachées, seulement s'il y en a. Un ajout demandé par « ＋ » ouvre
+  // son champ à la fin de sa section (créée au besoin), sans rien déplacer d'autre.
   const tache = estTache(i) && i.etat !== 'a_trier';
   const ajout = etat.ajouts.get(cleOuvert);
-  if (tache && (lignesChecklist(i.id).length || ajout === 'check')) parties.push(afficherChecklist(i.id, { formulaire: ajout === 'check' }));
+  const annuler = `<button type="button" class="mini" data-ajout-fermer="${echap(cleOuvert)}" aria-label="Annuler" title="Annuler (Échap)">✕</button>`;
+  if (tache && (lignesChecklist(i.id).length || ajout === 'check')) parties.push(afficherChecklist(i.id, { formulaire: ajout === 'check', annuler }));
   if (tache && (notes.length || ajout === 'note')) {
     parties.push(`<div class="bloc">
       <div class="bloc-titre">Notes attachées${notes.length ? ` <span class="compte">${notes.length}</span>` : ''}</div>
       ${notes.map((n) => `<div class="note-liee"><strong>${echap(libelle(n))}</strong>${n.details && n.details !== n.titre ? `<div>${echap(n.details)}</div>` : ''}</div>`).join('')}
       ${ajout === 'note' ? `<form class="mini-ajout" data-ajout-note="${i.id}">
         <textarea rows="1" data-garder="note-${i.id}" placeholder="Écris la note puis Entrée"></textarea>
-        <button type="submit" class="mini" aria-label="Attacher la note">＋</button></form>` : ''}
+        <button type="submit" class="mini" aria-label="Attacher la note">＋</button>${annuler}</form>` : ''}
     </div>`);
   }
   if (tache && ajout === 'sous') {
-    parties.push(`<form class="mini-ajout" data-ajout-sous="${i.id}">
-      <input data-garder="sous-${i.id}" placeholder="Nouvelle sous-tâche puis Entrée" autocomplete="off" enterkeyhint="done">
-      <button type="submit" class="mini" aria-label="Ajouter la sous-tâche">＋</button></form>`);
+    parties.push(`<div class="bloc">
+      <div class="bloc-titre">Nouvelle sous-tâche</div>
+      <form class="mini-ajout" data-ajout-sous="${i.id}">
+        <input data-garder="sous-${i.id}" placeholder="Écris la sous-tâche puis Entrée" autocomplete="off" enterkeyhint="done">
+        <button type="submit" class="mini" aria-label="Ajouter la sous-tâche">＋</button>${annuler}</form>
+    </div>`);
   }
 
-  // Barre d'actions : ajouts discrets à gauche, réglages à droite.
-  const boutons = [];
+  // Pied de fiche : « ＋ » à gauche (petit menu), « ⚙ Réglages » à droite. Rien d'autre.
+  const choix = [];
   if (tache) {
-    if (profondeur(i) + 1 < NIVEAUX_MAX) boutons.push(['sous', '↳ Sous-tâche']);
-    boutons.push(['check', '☑ Checklist'], ['note', '📎 Note']);
+    if (profondeur(i) + 1 < NIVEAUX_MAX) choix.push(['sous', '↳', 'Sous-tâche']);
+    choix.push(['check', '☑', 'Ligne de checklist'], ['note', '📎', 'Note attachée']);
   }
   const reglagesOuverts = etat.reglages.has(cleOuvert);
   parties.push(`<div class="barre-fiche">
-    ${cocher && i.etat === 'a_faire' ? `<button type="button" class="puce-action" data-action="en_cours" data-id="${i.id}">▶ En cours</button>` : ''}
-    ${boutons.length ? `<span class="menu-ajout">
-      <button type="button" class="puce-action btn-plus" data-menu-ajout="${echap(cleOuvert)}" aria-expanded="${etat.menuAjout.has(cleOuvert)}" aria-label="Ajouter" title="Ajouter une sous-tâche, une checklist ou une note">＋</button>
-      ${etat.menuAjout.has(cleOuvert) ? `<span class="choix-ajout" role="menu">${boutons.map(([k, t]) => `<button type="button" role="menuitem" class="puce-action" data-ajout-ouvrir="${k}" data-cle="${echap(cleOuvert)}">${t}</button>`).join('')}</span>` : ''}
-    </span>` : ''}
+    ${choix.length ? `<div class="menu-ajout">
+      <button type="button" class="puce-action btn-plus" data-menu-ajout aria-haspopup="menu" aria-expanded="false" aria-label="Ajouter" title="Ajouter une sous-tâche, une ligne de checklist ou une note">＋</button>
+      <div class="pop-ajout" role="menu" hidden>
+        ${choix.map(([k, ic, t]) => `<button type="button" role="menuitem" data-ajout-ouvrir="${k}" data-cle="${echap(cleOuvert)}"><span class="icone" aria-hidden="true">${ic}</span>${t}</button>`).join('')}
+      </div>
+    </div>` : ''}
     <button type="button" class="puce-action btn-reglages" data-reglages="${echap(cleOuvert)}" aria-expanded="${reglagesOuverts}">⚙ Réglages</button>
   </div>`);
 
@@ -619,7 +624,8 @@ function fiche(i, { niveau, cocher, cleOuvert, parent, notes, brut }) {
         value="${echap(i.projet || '')}" maxlength="60" placeholder="${TYPES_NOTES.includes(i.type) ? 'Laisser Claude choisir' : 'Aucun'}" autocomplete="off" enterkeyhint="done"></label>`);
     }
     if (cocher) r.push(blocPlanif(i));
-    if (cocher && i.etat === 'en_cours') r.push(`<button type="button" class="lien petit" data-remettre-a-faire="${i.id}">Ce n'est plus en cours</button>`);
+    if (cocher && i.etat === 'a_faire') r.push(`<label class="coche-reglage"><input type="checkbox" data-en-cours-de="${i.id}"> En cours (je l'ai commencée)</label>`);
+    if (cocher && i.etat === 'en_cours') r.push(`<label class="coche-reglage"><input type="checkbox" data-en-cours-de="${i.id}" checked> En cours (je l'ai commencée)</label>`);
     parties.push(`<div class="reglages">${r.join('') || '<p class="discret petit">Rien à régler ici.</p>'}</div>`);
   }
   return `<div class="details">${parties.join('')}</div>`;
@@ -634,35 +640,57 @@ document.addEventListener('click', (e) => {
     if (etat.reglages.has(cle)) document.querySelector(`[data-reglages="${CSS.escape(cle)}"]`)?.closest('.details')?.querySelector('.reglages')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     return;
   }
-  const menu = e.target.closest('[data-menu-ajout]');
-  if (menu) {
-    const cle = menu.dataset.menuAjout;
-    etat.menuAjout.has(cle) ? etat.menuAjout.delete(cle) : etat.menuAjout.add(cle);
-    afficher();
+  const plus = e.target.closest('[data-menu-ajout]');
+  const ouvert = document.querySelector('.pop-ajout:not([hidden])');
+  if (ouvert && (!e.target.closest('.pop-ajout') || e.target.closest('[data-ajout-ouvrir]'))) fermerMenuAjout(ouvert);
+  if (plus) {
+    const pop = plus.nextElementSibling;
+    if (pop !== ouvert) ouvrirMenuAjout(plus, pop);
     return;
   }
   const aj = e.target.closest('[data-ajout-ouvrir]');
   if (aj) {
     const { cle, ajoutOuvrir: k } = aj.dataset;
-    etat.menuAjout.delete(cle);
     etat.ajouts.set(cle, k);
+    const details = aj.closest('.details');
+    const haut = details?.getBoundingClientRect().top;
     afficher();
-    const champ = document.querySelector(`[data-menu-ajout="${CSS.escape(cle)}"]`)?.closest('.details')
-      ?.querySelector('.mini-ajout input, .mini-ajout textarea');
-    if (etat.ajouts.get(cle)) champ?.focus();
+    // On garde la fiche à la même place à l'écran, et le curseur dans le nouveau champ.
+    const nouvelle = document.querySelector(`[data-ajout-ouvrir][data-cle="${CSS.escape(cle)}"]`)?.closest('.details');
+    if (nouvelle && haut != null) scrollBy(0, nouvelle.getBoundingClientRect().top - haut);
+    const champ = nouvelle?.querySelector('.mini-ajout input, .mini-ajout textarea');
+    champ?.focus({ preventScroll: true });
+    champ?.scrollIntoView({ block: 'nearest' });
     return;
   }
-  const rf = e.target.closest('[data-remettre-a-faire]');
-  if (rf) {
-    const item = etat.items.find((i) => i.id === rf.dataset.remettreAFaire);
-    if (item) changerEtat(item, 'a_faire');
-  }
+  const ferme = e.target.closest('[data-ajout-fermer]');
+  if (ferme) { etat.ajouts.delete(ferme.dataset.ajoutFermer); afficher(); return; }
+});
+function ouvrirMenuAjout(plus, pop) {
+  pop.hidden = false;
+  plus.setAttribute('aria-expanded', 'true');
+  // Vers le bas s'il y a la place au-dessus de la barre d'ajout, sinon vers le haut.
+  const bas = ($('#form-ajout')?.getBoundingClientRect().top || innerHeight) - plus.getBoundingClientRect().bottom;
+  pop.classList.toggle('vers-haut', bas < pop.offsetHeight + 12);
+  pop.querySelector('button')?.focus({ preventScroll: true });
+}
+function fermerMenuAjout(pop) {
+  pop.hidden = true;
+  pop.previousElementSibling?.setAttribute('aria-expanded', 'false');
+}
+document.addEventListener('change', (e) => {
+  const c = e.target.closest('[data-en-cours-de]');
+  if (!c) return;
+  const item = etat.items.find((i) => i.id === c.dataset.enCoursDe);
+  if (item) changerEtat(item, c.checked ? 'en_cours' : 'a_faire');
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
+  const pop = document.querySelector('.pop-ajout:not([hidden])');
+  if (pop) { fermerMenuAjout(pop); pop.previousElementSibling?.focus(); return; }
   const f = e.target.closest?.('.mini-ajout');
   if (!f) return;
-  const cle = f.closest('.details')?.querySelector('[data-menu-ajout]')?.dataset.menuAjout;
+  const cle = f.querySelector('[data-ajout-fermer]')?.dataset.ajoutFermer;
   if (cle) { e.target.value = ''; etat.ajouts.delete(cle); afficher(); }
 });
 
