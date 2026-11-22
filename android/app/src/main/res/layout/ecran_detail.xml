@@ -67,6 +67,30 @@
             android:textStyle="bold" />
     </LinearLayout>
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="end"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btn_planifier"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Échéance, répéter…"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btn_rappel"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🔔 Me rappeler"
+            android:textColor="@color/accent"
+            android:textSize="13sp" />
+    </LinearLayout>
+
     <Button
         android:id="@+id/btn_appli"
         style="?android:attr/borderlessButtonStyle"

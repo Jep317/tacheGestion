@@ -63,6 +63,12 @@ input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 
 .onglets button, .espaces button { border: 0; background: none; border-radius: 999px; padding: 6px 12px; font-size: 14px; }
 #filtres { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 #filtres button { white-space: nowrap; flex: none; }
+#projets { max-width: 100%; overflow-x: auto; scrollbar-width: none; flex-basis: 100%; background: none; border: 0; padding: 0; }
+#projets button { white-space: nowrap; flex: none; border: 1px solid var(--ligne); background: var(--carte); font-size: 13px; padding: 4px 10px; }
+#projets button[aria-pressed="true"] { background: var(--accent); color: var(--accent-texte); border-color: var(--accent); font-weight: 600; }
+.groupe-projet { font-size: 15px; margin: 16px 0 4px; display: flex; align-items: baseline; gap: 6px; }
+.groupe-projet .lien { font: inherit; font-weight: 600; color: inherit; padding: 0; text-decoration: none; }
+.groupe-projet .compte { color: var(--discret); font-weight: 400; font-size: 14px; }
 #filtres .regler { color: var(--discret); padding: 6px 10px; }
 .onglets button[aria-selected="true"], .espaces button[aria-pressed="true"] { background: var(--accent); color: var(--accent-texte); font-weight: 600; }
 
@@ -102,7 +108,26 @@ input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 
 .c4 { color: var(--c4); } .c5 { color: var(--c5); } .c6 { color: var(--c6); } .c7 { color: var(--c7); }
 .choix-cat { display: inline-flex; gap: 8px; align-items: center; }
 select { font: inherit; font-size: 14px; color: var(--texte); background: var(--carte); border: 1px solid var(--ligne); border-radius: 8px; padding: 4px 6px; }
-.tag.echeance { color: var(--alerte); border-color: currentColor; }
+.tag.echeance { color: var(--accent); border-color: currentColor; }
+.tag.echeance.aujourdhui { font-weight: 600; }
+.tag.echeance.retard { color: var(--alerte); font-weight: 600; }
+
+/* Échéance, répétition et rappels (dans le détail d'une tâche) */
+.planif { white-space: normal; display: grid; gap: 6px; margin: 8px 0 4px; padding-top: 8px; border-top: 1px dashed var(--ligne); color: var(--texte); }
+.ligne-planif { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ligne-planif .etiquette { min-width: 72px; color: var(--discret); }
+.ligne-planif input[type=date], .ligne-planif input[type=time], .ligne-planif input[type=datetime-local] { width: auto; padding: 4px 6px; border-radius: 8px; font-size: 14px; }
+.ligne-planif input:disabled { opacity: .45; }
+.ligne-planif .nombre { width: 4.2em; padding: 4px 6px; border-radius: 8px; font-size: 14px; }
+.ligne-planif .lien { padding: 2px 6px; }
+.ligne-planif.jours { padding-left: 78px; gap: 4px; }
+.ligne-planif.indente { padding-left: 78px; }
+.jour { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--ligne); background: var(--carte); font-size: 13px; padding: 0; }
+.jour[aria-pressed="true"] { background: var(--accent); color: var(--accent-texte); border-color: var(--accent); }
+.coche { display: inline-flex; gap: 6px; align-items: center; padding-left: 78px; color: var(--discret); }
+.coche input { width: auto; }
+.rappels { list-style: none; margin: 0; padding: 0 0 0 78px; display: grid; gap: 2px; }
+.rappels .lien { padding: 0 6px; }
 .item .details { grid-column: 2; font-size: 14px; color: var(--discret); white-space: pre-wrap; overflow-wrap: anywhere; }
 .item .details p { margin: 4px 0; }
 
@@ -119,6 +144,36 @@ select { font: inherit; font-size: 14px; color: var(--texte); background: var(--
 .rond:disabled { opacity: .35; cursor: default; }
 .ligne-ajout { display: flex; gap: 8px; }
 .fenetre .fin { text-align: right; margin: 14px 0 0; }
+
+/* Résumé du matin */
+.aujourdhui { margin: 12px 0 18px; padding: 12px; border-radius: 16px; background: color-mix(in srgb, var(--accent) 12%, var(--fond)); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--ligne)); }
+.aujourdhui h2 { margin: 0 0 4px; font-size: 18px; color: var(--accent); }
+.item .raison { font-size: 13px; color: var(--discret); margin-top: 1px; }
+
+/* Questions de Claude */
+.questions { margin: 12px 0 0; padding: 12px; border-radius: 16px; background: var(--carte); border: 1px solid var(--accent); }
+.questions h2 { margin: 0 0 6px; font-size: 16px; color: var(--accent); }
+.question + .question { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--ligne); }
+.question .texte { overflow-wrap: anywhere; }
+.question .choix { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.question .choix button { max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+.question.traitee { opacity: .4; pointer-events: none; }
+
+/* Revue de la semaine */
+.bandeau-revue {
+  display: flex; gap: 6px; align-items: baseline; width: 100%; margin: 12px 0 0; text-align: left;
+  background: var(--carte); border: 1px solid var(--accent); border-radius: var(--rayon); padding: 10px 12px; font-size: 15px;
+}
+.bandeau-revue span { margin-left: auto; color: var(--accent); font-weight: 700; }
+.revue { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
+.proposition { display: flex; gap: 8px; align-items: center; background: var(--carte); border: 1px solid var(--ligne); border-radius: var(--rayon); padding: 8px 10px; transition: opacity .2s; }
+.proposition .corps { flex: 1; min-width: 0; }
+.proposition .titre { overflow-wrap: anywhere; }
+.proposition.traitee { opacity: .4; pointer-events: none; }
+.action-prop { font-size: 14px; font-weight: 600; color: var(--accent); }
+.action-prop.abandonner { color: var(--alerte); }
+.rond.oui { background: var(--accent); color: var(--accent-texte); border: 0; }
+.fenetre .fin { display: flex; justify-content: flex-end; gap: 8px; align-items: center; }
 
 /* Notes */
 #recherche { margin: 8px 0 4px; }
@@ -200,3 +255,55 @@ body.panneau .connexion { padding-right: 44px; }
 body.verrouille .btn-verrou::before { content: "🔒"; }
 body.verrouille .btn-verrou { border-color: var(--accent); }
 body.panneau:has(.btn-verrou) .entete { padding-right: 76px; }
+
+/* Sous-tâches : l'arbre sous la tâche parent, relié par un trait */
+.items > .branche { margin: -2px 0 0 18px; padding-left: 12px; border-left: 2px solid var(--ligne); list-style: none; }
+.items > .branche > .items { margin-top: 0; }
+.item.sous-tache { padding: 8px 10px; }
+.item.sous-tache .case { width: 19px; height: 19px; }
+.item .meta .contexte { color: var(--accent); }
+.tag.arbre, .tag.lie { background: none; font: inherit; color: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+.tag.lie { color: var(--accent); border-color: currentColor; }
+.tag.arbre .barre { display: inline-block; width: 36px; height: 5px; border-radius: 3px; background: var(--ligne); overflow: hidden; }
+.tag.arbre .barre i { display: block; height: 100%; background: var(--accent); }
+.item.eclaire { outline: 2px solid var(--accent); transition: outline-color .6s; }
+
+/* Fiche : blocs checklist, notes attachées, ajouts rapides */
+.details .bloc { margin: 8px 0; white-space: normal; }
+.bloc-titre { font-weight: 600; color: var(--texte); font-size: 13px; margin-bottom: 2px; }
+.bloc-titre .compte { color: var(--discret); font-weight: 400; }
+.mini-ajout { display: flex; gap: 6px; margin: 6px 0; align-items: center; }
+.mini-ajout input, .mini-ajout textarea { padding: 6px 10px; font-size: 14px; border-radius: 8px; resize: none; }
+.mini { flex: none; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--ligne); background: var(--carte); color: var(--discret); padding: 0; font-size: 14px; line-height: 1; }
+.mini:hover { color: var(--texte); border-color: var(--discret); }
+.checklist .lignes { list-style: none; margin: 4px 0; padding: 0; display: grid; gap: 2px; }
+.checklist .lignes li { display: flex; align-items: center; gap: 6px; }
+.checklist .lignes label { flex: 1; display: flex; align-items: center; gap: 8px; color: var(--texte); cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.checklist .lignes input { width: 18px; height: 18px; accent-color: var(--accent); flex: none; margin: 0; }
+.checklist .lignes li.coche .check-texte { text-decoration: line-through; color: var(--discret); }
+.checklist .lignes .mini { width: 26px; height: 26px; font-size: 12px; opacity: .7; }
+.note-liee { border-left: 3px solid var(--accent); padding: 2px 8px; margin: 4px 0; color: var(--texte); white-space: pre-wrap; }
+.note-liee div { color: var(--discret); }
+.lien.petit { font-size: 13px; padding: 2px 0; }
+.choix-cat { flex-wrap: wrap; max-width: 100%; }
+.choix-cat > span { white-space: nowrap; }
+.choix-cat select { max-width: 100%; }
+
+/* Liste de courses : gros articles faciles à toucher en magasin */
+#vue-courses { padding: 12px 16px; }
+.courses { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.courses li label {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px; min-height: 48px;
+  background: var(--carte); border: 1px solid var(--ligne); border-radius: var(--rayon);
+  cursor: pointer; user-select: none; -webkit-user-select: none; font-size: 17px;
+}
+.courses li input { width: 22px; height: 22px; margin: 0; flex: none; accent-color: var(--accent); }
+.courses li.coche label { opacity: .55; transition: opacity 3.5s ease-in; }
+.courses li.coche span { text-decoration: line-through; color: var(--discret); }
+.courses li.vide { color: var(--discret); padding: 16px 4px; }
+.suggestions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 14px; }
+.suggestions:empty { display: none; }
+.suggestions button {
+  border: 1px dashed var(--ligne); background: none; border-radius: 999px; padding: 6px 12px; font-size: 14px; color: var(--texte);
+}
+.suggestions button:hover { border-color: var(--accent); color: var(--accent); }

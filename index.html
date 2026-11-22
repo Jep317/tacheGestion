@@ -30,8 +30,10 @@
       <nav class="onglets" role="tablist">
         <button role="tab" data-vue="liste" aria-selected="true">Liste</button>
         <button role="tab" data-vue="notes" aria-selected="false">Notes</button>
+        <button role="tab" data-vue="courses" aria-selected="false">🛒 Courses</button>
       </nav>
       <div id="filtres" class="espaces" role="group" aria-label="Catégories"></div>
+      <div id="projets" class="espaces projets" role="group" aria-label="Projets" hidden></div>
     </header>
 
     <main id="contenu">
@@ -39,6 +41,10 @@
       <section id="vue-notes" hidden>
         <input id="recherche" type="search" placeholder="Rechercher dans les notes et idées">
         <div id="liste-notes"></div>
+      </section>
+      <section id="vue-courses" hidden>
+        <ul id="liste-courses" class="courses"></ul>
+        <div id="suggestions" class="suggestions" aria-label="Déjà achetés"></div>
       </section>
     </main>
 
@@ -63,6 +69,18 @@
         <button type="submit" class="principal">Ajouter</button>
       </form>
       <p class="fin"><button type="button" id="btn-fermer-categories" class="principal">Terminé</button></p>
+    </div>
+  </div>
+
+  <div id="dlg-revue" class="voile" hidden>
+    <div class="fenetre" role="dialog" aria-modal="true" aria-labelledby="titre-revue">
+      <h2 id="titre-revue">Revue de la semaine</h2>
+      <p class="discret petit">Claude propose ces changements. Rien ne bouge sans ton accord.</p>
+      <ul id="liste-revue" class="revue"></ul>
+      <p class="fin">
+        <button type="button" id="btn-tout-accepter" class="lien">Tout accepter</button>
+        <button type="button" id="btn-fermer-revue" class="principal">Plus tard</button>
+      </p>
     </div>
   </div>
 
