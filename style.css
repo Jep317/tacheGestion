@@ -101,15 +101,15 @@ input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 
 .item .corps { min-width: 0; cursor: pointer; }
 .item .titre { overflow-wrap: anywhere; }
 .item.brut .titre { font-style: italic; }
-.item .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; font-size: 12px; color: var(--discret); }
-.tag { border: 1px solid var(--ligne); border-radius: 999px; padding: 0 7px; }
+.item .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 2px; font-size: 12px; color: var(--discret); }
+.tag { border: 1px solid var(--ligne); border-radius: 999px; padding: 0 7px; white-space: nowrap; line-height: 1.5; }
 .tag.cat { border-color: currentColor; }
 .c0 { color: var(--c0); } .c1 { color: var(--c1); } .c2 { color: var(--c2); } .c3 { color: var(--c3); }
 .c4 { color: var(--c4); } .c5 { color: var(--c5); } .c6 { color: var(--c6); } .c7 { color: var(--c7); }
 .choix-cat { display: inline-flex; gap: 8px; align-items: center; }
 select { font: inherit; font-size: 14px; color: var(--texte); background: var(--carte); border: 1px solid var(--ligne); border-radius: 8px; padding: 4px 6px; }
 .tag.echeance { color: var(--accent); border-color: currentColor; }
-.tag.echeance.aujourdhui { font-weight: 600; }
+.tag.echeance.du-jour { font-weight: 600; }
 .tag.echeance.retard { color: var(--alerte); font-weight: 600; }
 
 /* Échéance, répétition et rappels (dans le détail d'une tâche) */

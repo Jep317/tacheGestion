@@ -895,7 +895,7 @@ function dateHeure(ts) {
 
 function tagEcheance(i) {
   const auj = aujourdhui();
-  const classe = i.echeance < auj ? ' retard' : i.echeance === auj ? ' aujourdhui' : '';
+  const classe = i.echeance < auj ? ' retard' : i.echeance === auj ? ' du-jour' : '';
   const jour = i.echeance === auj ? 'Aujourd\'hui' : i.echeance === ajouterJours(auj, 1) ? 'Demain' : dateCourte(i.echeance);
   const titre = i.echeance < auj ? 'En retard' : 'Échéance';
   return `<span class="tag echeance${classe}" title="${titre}">${jour}${i.echeance_heure ? ' ' + heureCourte(i.echeance_heure) : ''}</span>`;
