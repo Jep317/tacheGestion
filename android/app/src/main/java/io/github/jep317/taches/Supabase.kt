@@ -35,6 +35,8 @@ object Supabase {
         val sousTotal: Int = 0,
         val checkCochees: Int = 0,       // lignes de checklist cochées / total : « ☑ 2/4 »
         val checkTotal: Int = 0,
+        val prioriteJour: String? = null,   // date (AAAA-MM-JJ) où Claude l'a choisie parmi les priorités du jour
+        val prioriteRang: Int = 0,
     ) {
         val libelle: String get() = titre?.takeIf { it.isNotBlank() } ?: texteBrut
     }
@@ -141,7 +143,7 @@ object Supabase {
     // ---------- données ----------
     fun lireListe(ctx: Context): List<Item> {
         val j = jeton(ctx)
-        val chemin = "/rest/v1/items?select=id,texte_brut,titre,details,type,categorie:categories(nom),horizon,etat,theme,projet,echeance,parent_id" +
+        val chemin = "/rest/v1/items?select=id,texte_brut,titre,details,type,categorie:categories(nom),horizon,etat,theme,projet,echeance,parent_id,priorite_jour,priorite_rang" +
             "&etat=in.(a_trier,a_faire,en_cours)&order=ordre.asc.nullslast,cree_le.asc"
         val liste = JSONArray(requete("GET", chemin, null, j))
         // Sous-tâches (faites comprises) et checklists, pour afficher « 2/5 » et « ☑ 2/4 ».
@@ -206,6 +208,8 @@ object Supabase {
                 sousTotal = o.optInt("_sous_total"),
                 checkCochees = o.optInt("_check_cochees"),
                 checkTotal = o.optInt("_check_total"),
+                prioriteJour = o.chaine("priorite_jour"),
+                prioriteRang = o.optInt("priorite_rang", 0),
             )
         }
     }
