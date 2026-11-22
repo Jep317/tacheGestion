@@ -150,6 +150,15 @@ select { font: inherit; font-size: 14px; color: var(--texte); background: var(--
 .aujourdhui h2 { margin: 0 0 4px; font-size: 18px; color: var(--accent); }
 .item .raison { font-size: 13px; color: var(--discret); margin-top: 1px; }
 
+/* Questions de Claude */
+.questions { margin: 12px 0 0; padding: 12px; border-radius: 16px; background: var(--carte); border: 1px solid var(--accent); }
+.questions h2 { margin: 0 0 6px; font-size: 16px; color: var(--accent); }
+.question + .question { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--ligne); }
+.question .texte { overflow-wrap: anywhere; }
+.question .choix { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.question .choix button { max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+.question.traitee { opacity: .4; pointer-events: none; }
+
 /* Revue de la semaine */
 .bandeau-revue {
   display: flex; gap: 6px; align-items: baseline; width: 100%; margin: 12px 0 0; text-align: left;
