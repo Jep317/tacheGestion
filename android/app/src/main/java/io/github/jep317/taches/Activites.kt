@@ -43,6 +43,9 @@ private fun ouvrirAppliWeb(ctx: Context, parametres: String = "") {
 object Details {
     fun meta(i: Supabase.Item): String {
         val m = mutableListOf<String>()
+        i.parent?.let { m += "↳ $it" }
+        if (i.sousTotal > 0) m += "▾ ${i.sousFaites}/${i.sousTotal}"
+        if (i.checkTotal > 0) m += "☑ ${i.checkCochees}/${i.checkTotal}"
         i.categorie?.let { m += it }
         if (i.type == "course") m += "Course"
         if (i.type == "idee") m += "Idée"
@@ -144,6 +147,7 @@ class MainActivity : Activity() {
             poser.visibility = View.GONE
         }
         findViewById<Button>(R.id.btn_ajouter).setOnClickListener { startActivity(Intent(this, AjoutActivity::class.java)) }
+        findViewById<Button>(R.id.btn_courses).setOnClickListener { startActivity(Intent(this, CoursesActivity::class.java)) }
         findViewById<Button>(R.id.btn_appli).setOnClickListener { ouvrirAppliWeb(this) }
         findViewById<Button>(R.id.btn_categories).setOnClickListener { ouvrirAppliWeb(this, "?categories=1") }
         findViewById<Button>(R.id.btn_deconnexion).setOnClickListener {
@@ -241,6 +245,11 @@ class AjoutActivity : Activity() {
 class DetailActivity : Activity() {
     override fun onCreate(etat: Bundle?) {
         super.onCreate(etat)
+        if (intent.getBooleanExtra("courses", false)) {
+            startActivity(Intent(this, CoursesActivity::class.java))
+            finish()
+            return
+        }
         val id = intent.getStringExtra("id")
         if (id == null) {
             // Ligne de résumé : ouvrir l'appli complète (ou la connexion si besoin).

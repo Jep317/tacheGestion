@@ -1,5 +1,5 @@
 -- Échéance avec heure, rappels (notifications Android et Windows) et tâches récurrentes.
--- Appliqué le 2026-11-22 (migration rappels_recurrence).
+-- Appliqué le 2026-11-22 (migrations rappels_recurrence, recurrence_annulation, recurrence_parent_checklist).
 
 -- ---------- Échéance et récurrence sur les éléments ----------
 alter table items add column echeance_heure time;      -- facultative ; sans heure, l'échéance vaut pour la journée
@@ -112,17 +112,21 @@ begin
   if prochaine is null then return new; end if;
 
   insert into public.items (texte_brut, titre, details, type, espace, horizon, etat, theme, projet,
-                            categorie_id, echeance, echeance_heure, recurrence, source, trie_le)
+                            categorie_id, parent_id, echeance, echeance_heure, recurrence, source, trie_le)
   values (new.texte_brut, new.titre, new.details, new.type, new.espace,
           coalesce(public.horizon_selon_echeance(prochaine), new.horizon),
           case when new.titre is null then 'a_trier'::public.item_etat else 'a_faire'::public.item_etat end,
-          new.theme, new.projet, new.categorie_id, prochaine, new.echeance_heure, new.recurrence,
+          new.theme, new.projet, new.categorie_id, new.parent_id, prochaine, new.echeance_heure, new.recurrence,
           'recurrence', new.trie_le)
   returning id into nouvel_id;
 
   insert into public.rappels (item_id, titre, texte, relatif_min, quand)
   select nouvel_id, r.titre, r.texte, r.relatif_min, public.heure_rappel(prochaine, r.relatif_min)
   from public.rappels r where r.item_id = new.id and r.relatif_min is not null;
+
+  -- La checklist repart à zéro sur l'occurrence suivante (table checklist, ajoutée avec les sous-tâches).
+  insert into public.checklist (item_id, texte, coche, ordre)
+  select nouvel_id, c.texte, false, c.ordre from public.checklist c where c.item_id = new.id;
 
   insert into public.journal (item_id, action, avant, apres, par)
   values (nouvel_id, 'cree', jsonb_build_object('repete', new.id),
