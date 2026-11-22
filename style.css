@@ -362,3 +362,13 @@ body.glisse-en-cours, body.glisse-en-cours * { cursor: grabbing !important; -web
 .horizon.cible > summary { color: var(--accent); }
 .horizon.cible > summary::after { content: "← lâcher ici"; font-size: 13px; font-weight: 400; color: var(--accent); }
 #liste-projets input { flex: 1; min-width: 0; }
+
+/* Fiche ouverte dans un panneau étroit : rien ne doit dépasser à droite (un long titre de tâche
+   dans « Sous-tâche de » élargissait toute la carte). */
+.item { grid-template-columns: auto minmax(0, 1fr); }
+.item .details, .details .bloc, .details p, .mini-ajout, .planif, .ligne-planif { min-width: 0; max-width: 100%; }
+.mini-ajout input, .mini-ajout textarea { flex: 1 1 auto; min-width: 0; width: 100%; }
+.choix-cat { display: flex; flex-wrap: wrap; gap: 4px 8px; width: 100%; }
+.choix-cat select { flex: 1 1 0; min-width: 0; width: 100%; text-overflow: ellipsis; }
+.choix-cat .champ-projet { flex: 1 1 0; }
+.ligne-planif select { min-width: 0; max-width: 100%; }
