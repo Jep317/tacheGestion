@@ -1346,26 +1346,71 @@ let reco = null;
 const micro = $('#btn-micro');
 if (!Reconnaissance) micro.hidden = true;
 
+// Dictée longue : le navigateur coupe la reconnaissance à chaque pause ; on la relance tant que
+// Jérémie n'a pas retouché le micro (ou envoyé), et on met les morceaux bout à bout.
+let dicteeVoulue = false;
+let dicteeAcquis = '';
+let dicteeDerniereParole = 0;
+const DICTEE_SILENCE_MAX = 3 * 60 * 1000; // arrêt tout seul après 3 minutes sans un mot
+
+function joindre(a, b) {
+  a = a.trimEnd(); b = b.trim();
+  if (!b) return a;
+  if (!a) return b.charAt(0).toUpperCase() + b.slice(1);
+  return a + (/[.!?…]$/.test(a) ? ' ' : '. ') + b.charAt(0).toUpperCase() + b.slice(1);
+}
+
 function demarrerDictee() {
   if (!Reconnaissance || reco) return;
+  dicteeVoulue = true;
+  dicteeAcquis = saisie.value;
+  dicteeDerniereParole = Date.now();
+  micro.classList.add('ecoute');
+  micro.title = 'Terminer la dictée';
+  toast('J’écoute… parle aussi longtemps que tu veux, retouche 🎤 pour finir.');
+  ecouterMorceau();
+}
+
+function ecouterMorceau() {
   reco = new Reconnaissance();
   reco.lang = 'fr-FR';
   reco.interimResults = true;
-  reco.continuous = false;
-  const debut = saisie.value ? saisie.value.trimEnd() + ' ' : '';
+  reco.continuous = false; // plus fiable sur Android (pas de phrases en double) ; la relance fait le reste
+  let morceau = '';
   reco.onresult = (ev) => {
-    let texte = '';
-    for (const r of ev.results) texte += r[0].transcript;
-    saisie.value = debut + texte;
+    let fini = '', provisoire = '';
+    for (const r of ev.results) (r.isFinal ? (fini += r[0].transcript + ' ') : (provisoire += r[0].transcript));
+    morceau = (fini + provisoire).trim();
+    dicteeDerniereParole = Date.now();
+    saisie.value = joindre(dicteeAcquis, morceau);
     sourceSaisie = 'vocal';
     ajusterHauteur();
   };
-  reco.onerror = (ev) => { if (ev.error !== 'no-speech' && ev.error !== 'aborted') toast('Dictée impossible : ' + ev.error); };
-  reco.onend = () => { reco = null; micro.classList.remove('ecoute'); saisie.focus(); };
-  micro.classList.add('ecoute');
-  reco.start();
+  reco.onerror = (ev) => {
+    if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed' || ev.error === 'audio-capture') {
+      dicteeVoulue = false;
+      toast('Dictée impossible : ' + ev.error);
+    } else if (ev.error !== 'no-speech' && ev.error !== 'aborted' && ev.error !== 'network') {
+      toast('Dictée : ' + ev.error);
+    }
+  };
+  reco.onend = () => {
+    dicteeAcquis = joindre(dicteeAcquis, morceau);
+    reco = null;
+    if (dicteeVoulue && Date.now() - dicteeDerniereParole < DICTEE_SILENCE_MAX && !document.hidden) {
+      setTimeout(() => { if (dicteeVoulue && !reco) ecouterMorceau(); }, 150);
+      return;
+    }
+    dicteeVoulue = false;
+    micro.classList.remove('ecoute');
+    micro.title = 'Dicter';
+    saisie.value = dicteeAcquis;
+    ajusterHauteur();
+    saisie.focus();
+  };
+  try { reco.start(); } catch { reco = null; dicteeVoulue = false; micro.classList.remove('ecoute'); }
 }
-function arreterDictee() { if (reco) reco.stop(); }
+function arreterDictee() { dicteeVoulue = false; if (reco) reco.stop(); }
 micro.addEventListener('click', () => (reco ? arreterDictee() : demarrerDictee()));
 
 // ?item=<id> (bouton « Échéance, répéter… » de l'appli Android) : ouvre directement le détail de la tâche.

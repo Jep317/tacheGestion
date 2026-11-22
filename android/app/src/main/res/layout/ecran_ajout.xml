@@ -27,7 +27,8 @@
             android:hint="Ce qui te passe par la tête…"
             android:imeOptions="actionSend"
             android:inputType="textCapSentences|textMultiLine"
-            android:maxLines="5" />
+            android:maxLines="12"
+            android:scrollbars="vertical" />
 
         <ImageButton
             android:id="@+id/btn_micro"
@@ -40,6 +41,14 @@
             android:scaleType="fitCenter"
             android:src="@drawable/ic_micro" />
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/statut_dictee"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textSize="13sp"
+        android:visibility="gone" />
 
     <LinearLayout
         android:layout_width="match_parent"
