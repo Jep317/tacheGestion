@@ -333,3 +333,32 @@ body.verrouille .barre-reduite .poignee { -webkit-app-region: no-drag; app-regio
   border: 1px dashed var(--ligne); background: none; border-radius: 999px; padding: 6px 12px; font-size: 14px; color: var(--texte);
 }
 .suggestions button:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Rangées de pastilles qui débordent : on devine la suite par un fondu sur le bord */
+#filtres, #projets { -webkit-app-region: no-drag; app-region: no-drag; overscroll-behavior-x: contain; }
+#filtres.deborde-d, #projets.deborde-d { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+#filtres.deborde-g, #projets.deborde-g { -webkit-mask-image: linear-gradient(to right, transparent, #000 28px); mask-image: linear-gradient(to right, transparent, #000 28px); }
+#filtres.deborde-g.deborde-d, #projets.deborde-g.deborde-d { -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
+#filtres.defile, #projets.defile { cursor: grabbing; }
+#filtres.defile button, #projets.defile button { cursor: grabbing; }
+#projets .regler { color: var(--discret); border-style: dashed; }
+
+/* Projet d'un élément (dans sa fiche) */
+.champ-projet { width: auto; min-width: 0; flex: 1 1 160px; padding: 4px 8px; border-radius: 8px; font-size: 14px; }
+.compte-projet { white-space: nowrap; }
+
+/* Glisser-déposer des tâches entre horizons */
+#vue-liste .horizon:not(.a-trier) > .items > .item > .corps { -webkit-touch-callout: none; }
+@media (hover: hover) { #vue-liste .horizon:not(.a-trier) > .items > .item { cursor: grab; } #vue-liste .item .case, #vue-liste .item button { cursor: pointer; } }
+@media (pointer: coarse) { #vue-liste .horizon:not(.a-trier) > .items > .item > .corps { -webkit-user-select: none; user-select: none; } }
+body.glisse-en-cours, body.glisse-en-cours * { cursor: grabbing !important; -webkit-user-select: none; user-select: none; }
+.item.glisse-origine { opacity: .35; }
+.fantome {
+  position: fixed; left: 0; top: 0; z-index: 50; pointer-events: none; margin: 0; list-style: none;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .28); transform-origin: 20px 20px; opacity: .95;
+  background: var(--carte); backdrop-filter: blur(8px);
+}
+.repere { list-style: none; height: 0; border-top: 3px solid var(--accent); border-radius: 3px; margin: -1px 4px; }
+.horizon.cible > summary { color: var(--accent); }
+.horizon.cible > summary::after { content: "← lâcher ici"; font-size: 13px; font-weight: 400; color: var(--accent); }
+#liste-projets input { flex: 1; min-width: 0; }
