@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mes Tâches : télécharger</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .dl { max-width: 560px; margin: 0 auto; padding: 24px 16px 48px; }
+  .dl h1 { margin: 0 0 4px; }
+  .dl .sous { color: var(--discret); margin: 0 0 20px; }
+  .carte-dl { background: var(--carte); border: 1px solid var(--ligne); border-radius: var(--rayon); padding: 16px; margin: 0 0 14px; }
+  .carte-dl h2 { margin: 0 0 6px; font-size: 18px; }
+  .carte-dl p { margin: 6px 0; }
+  .bouton-dl { display: inline-block; margin-top: 6px; padding: 10px 16px; border-radius: 10px; background: var(--accent); color: #fff; text-decoration: none; font-weight: 600; }
+  .info { color: var(--discret); font-size: 14px; }
+  .alerte { border-left: 4px solid #c9822b; padding: 8px 12px; background: var(--fond); border-radius: 6px; }
+  .ok { border-left: 4px solid var(--accent); padding: 8px 12px; background: var(--fond); border-radius: 6px; }
+  .dl ol { padding-left: 20px; margin: 6px 0; }
+  .dl a:not(.bouton-dl) { color: var(--accent); }
+</style>
+</head>
+<body>
+<main class="dl">
+  <h1>Télécharger</h1>
+  <p class="sous">Toujours la dernière version. Cette page se met à jour toute seule à chaque nouvelle version.</p>
+
+  <section class="carte-dl">
+    <h2>📱 Android</h2>
+    <p>Appli avec le widget de l'écran d'accueil. Ouvre ce lien sur le téléphone, puis ouvre le fichier téléchargé.</p>
+    <a class="bouton-dl" href="https://github.com/Jep317/tacheGestion/releases/download/android/Taches-Android.apk">Télécharger Taches-Android.apk</a>
+    <p class="info" id="android-date"></p>
+  </section>
+
+  <section class="carte-dl">
+    <h2>🖥️ Windows (Microsoft Store)</h2>
+    <div id="store-etat"><p class="info">Chargement…</p></div>
+  </section>
+
+  <section class="carte-dl">
+    <h2>🌐 Appli web</h2>
+    <p>Rien à installer, elle est toujours à jour : <a href="./">ouvrir Mes Tâches</a>.</p>
+  </section>
+</main>
+<script>
+(async () => {
+  const depot = 'https://api.github.com/repos/Jep317/tacheGestion';
+  const date = (d) => new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  const plusRecente = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number);
+    for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; };
+  const zone = document.getElementById('store-etat');
+  try {
+    const [android, win, store] = await Promise.all([
+      fetch(depot + '/releases/tags/android').then(r => r.json()),
+      fetch(depot + '/releases/latest').then(r => r.json()),
+      fetch('store.json', { cache: 'no-store' }).then(r => r.json()),
+    ]);
+    const apk = (android.assets || []).find(a => a.name === 'Taches-Android.apk');
+    if (apk) document.getElementById('android-date').textContent = 'Version du ' + date(apk.updated_at) + '.';
+    const version = (win.tag_name || '').replace(/^v/, '');
+    const paquet = (win.assets || []).find(a => /^Taches-Store-.*\.appx$/.test(a.name));
+    const lien = paquet ? `<a class="bouton-dl" href="${paquet.browser_download_url}">Télécharger ${paquet.name}</a>` : '';
+    if (version && plusRecente(version, store.soumise)) {
+      zone.innerHTML = `<p class="alerte"><b>À faire : la version ${version} est à envoyer au Store.</b><br>
+        Le Store a la ${store.soumise} (${store.statut}).` +
+        (store.statut !== 'publiée' ? ` Attends qu'elle soit validée avant d'envoyer la suivante.` : '') + `</p>
+        ${lien}
+        <ol class="info">
+          <li>Ouvre <a href="https://partner.microsoft.com/dashboard/apps-and-games/overview">Partner Center</a>, appli MesTaches.</li>
+          <li>« Mettre à jour » la soumission, section Packages : retire l'ancien fichier, dépose ${paquet ? paquet.name : 'le nouveau'}.</li>
+          <li>« Soumettre pour certification ». Préviens Claude quand c'est fait.</li>
+        </ol>`;
+    } else {
+      zone.innerHTML = `<p class="ok">Rien à faire : le Store a déjà la dernière version (${store.soumise}, ${store.statut}).
+        Windows la met à jour tout seul.</p>${lien ? '<p class="info">Paquet actuel : ' + paquet.name + '</p>' : ''}`;
+    }
+  } catch (e) {
+    zone.innerHTML = `<p>Impossible de lire les versions. <a href="https://github.com/Jep317/tacheGestion/releases/latest">Dernière version Windows</a>.</p>`;
+  }
+})();
+</script>
+</body>
+</html>
