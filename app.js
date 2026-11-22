@@ -556,9 +556,12 @@ function infosDe(i, parent) {
 
 function fiche(i, { niveau, cocher, cleOuvert, parent, notes, brut }) {
   const parties = [];
-  if (i.details) parties.push(`<div class="description">${echap(i.details)}</div>`);
+  const note = TYPES_NOTES.includes(i.type);
+  if (i.etat === 'a_trier') { if (i.details) parties.push(`<div class="description">${echap(i.details)}</div>`); }
+  else parties.push(`<textarea class="description description-edit${note ? ' note' : ''}" rows="${note ? 3 : 1}" data-edition="details" data-id="${i.id}" data-cle="${echap(cleOuvert)}"
+    aria-label="${note ? 'Texte de la note' : 'Description'}" placeholder="${note ? 'Écris le texte de ta note…' : 'Ajouter une description…'}">${echap(i.details || '')}</textarea>`);
   parties.push(infosDe(i, parent));
-  if (!brut && i.texte_brut && i.texte_brut !== i.titre && i.texte_brut !== i.details) {
+  if (!brut && !note && i.texte_brut && i.texte_brut !== i.titre && i.texte_brut !== i.details) {
     parties.push(`<p class="dicte" title="Ce que tu as dicté ou écrit">« ${echap(i.texte_brut)} »</p>`);
   }
 
@@ -903,14 +906,18 @@ function carte(i, { cocher = true, niveau = 0, contexte = false, raison = '', ar
 
   let detail = '';
   if (ouvert) detail = fiche(i, { niveau, cocher, cleOuvert, parent, notes, brut });
-  let html = `<li class="item${brut ? ' brut' : ''}${niveau ? ' sous-tache' : ''}" data-id="${i.id}">
+  // Fiche ouverte : le titre se modifie sur place (sauf « à trier », que Claude n'a pas encore rangé).
+  const editable = ouvert && !brut && i.etat !== 'a_trier';
+  let html = `<li class="item${brut ? ' brut' : ''}${niveau ? ' sous-tache' : ''}${ouvert ? ' ouvert' : ''}" data-id="${i.id}">
     ${cocher ? `<button class="case" data-action="fait" data-id="${i.id}" aria-label="Marquer comme fait" title="Fait"></button>` : '<span></span>'}
     <div class="corps" data-action="ouvrir" data-id="${i.id}" data-ouvrir="${cleOuvert}">
-      <div class="titre">${echap(libelle(i))}</div>
+      ${editable ? `<textarea class="titre titre-edit" rows="1" data-edition="titre" data-id="${i.id}" data-cle="${echap(cleOuvert)}" maxlength="200"
+        aria-label="Titre" placeholder="Titre" enterkeyhint="done">${echap(libelle(i))}</textarea>` : `<div class="titre">${echap(libelle(i))}</div>`}
       ${raison ? `<div class="raison">${echap(raison)}</div>` : ''}
       ${ouvert ? (prog.total ? `<div class="meta">${tags[tags.findIndex((t) => t.includes('data-action="arbre"'))] || ''}</div>` : '')
         : tags.length ? `<div class="meta">${tags.join('')}</div>` : ''}
     </div>
+    ${ouvert ? `<button type="button" class="fermer-fiche" data-action="ouvrir" data-id="${i.id}" data-ouvrir="${cleOuvert}" aria-label="Refermer" title="Refermer">⌃</button>` : ''}
     ${detail}
   </li>`;
   // L'arbre : les sous-tâches sous leur parent, reliées par un trait.
@@ -1066,12 +1073,51 @@ function garderSaisies() {
   const valeurs = new Map();
   document.querySelectorAll('[data-garder]').forEach((c) => { if (c.value) valeurs.set(c.dataset.garder, c.value); });
   const actif = document.activeElement?.dataset?.garder;
-  return { valeurs, actif };
+  const a = document.activeElement;
+  const edition = a?.dataset?.edition ? { sel: `[data-edition="${a.dataset.edition}"][data-cle="${CSS.escape(a.dataset.cle)}"]`, v: a.value, d: a.selectionStart, f: a.selectionEnd } : null;
+  return { valeurs, actif, edition };
 }
-function restaurerSaisies({ valeurs, actif }) {
+function restaurerSaisies({ valeurs, actif, edition }) {
   for (const [cle, v] of valeurs) { const c = document.querySelector(`[data-garder="${cle}"]`); if (c) c.value = v; }
   if (actif) document.querySelector(`[data-garder="${actif}"]`)?.focus();
+  ajusterEditions();
+  if (edition) {
+    const c = document.querySelector(edition.sel);
+    if (c) { c.value = edition.v; ajusterHauteurDe(c); c.focus({ preventScroll: true }); c.setSelectionRange(edition.d, edition.f); }
+  }
 }
+
+// ---------- titre et texte modifiables dans la fiche ----------
+function ajusterHauteurDe(c) { c.style.height = 'auto'; c.style.height = c.scrollHeight + 'px'; }
+function ajusterEditions() { document.querySelectorAll('[data-edition]').forEach(ajusterHauteurDe); }
+async function enregistrerEdition(c) {
+  const item = etat.items.find((i) => i.id === c.dataset.id);
+  if (!item) return;
+  const champ = c.dataset.edition;
+  let v = c.value.replace(/\s+$/, '');
+  if (champ === 'titre') {
+    v = v.replace(/\s+/g, ' ').trim();
+    if (!v) { c.value = libelle(item); ajusterHauteurDe(c); return; } // un titre ne peut pas être vide
+  }
+  const avant = champ === 'titre' ? libelle(item) : (item.details || '');
+  if (v === avant) return;
+  const ancien = item[champ] ?? null;
+  item[champ] = v || null; // tout de suite, pour qu'un rechargement ne remette pas l'ancien texte
+  if (await majItem({ id: item.id, [champ]: ancien }, { [champ]: v || null })) toast('Enregistré.');
+}
+document.addEventListener('input', (e) => { if (e.target.matches?.('[data-edition]')) ajusterHauteurDe(e.target); });
+document.addEventListener('focusout', (e) => { if (e.target.matches?.('[data-edition]')) enregistrerEdition(e.target); });
+document.addEventListener('keydown', (e) => {
+  const c = e.target;
+  if (!c.matches?.('[data-edition]')) return;
+  if (c.dataset.edition === 'titre' && e.key === 'Enter') { e.preventDefault(); c.blur(); }
+  else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); c.blur(); }
+  else if (e.key === 'Escape') {
+    const item = etat.items.find((i) => i.id === c.dataset.id);
+    if (item) c.value = c.dataset.edition === 'titre' ? libelle(item) : (item.details || '');
+    c.blur();
+  }
+});
 
 // ---------- échéance, rappels et répétition ----------
 const JOURS = ['L', 'M', 'M', 'J', 'V', 'S', 'D']; // 1 = lundi … 7 = dimanche (comme la base)
@@ -1356,6 +1402,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && ab
 
 // ---------- interactions ----------
 document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-edition]')) return;
   const cible = e.target.closest('[data-action]');
   if (!cible) return;
   const item = etat.items.find((i) => i.id === cible.dataset.id);
