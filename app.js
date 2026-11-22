@@ -1420,6 +1420,33 @@ if (/TachesPanneau\//.test(navigator.userAgent)) {
     verrou.addEventListener('click', () => window.open('taches://verrou'));
     document.body.append(verrou);
   }
+  // Panneau 3 et suivants : deux boutons, « masquer complètement » (✕) et « réduire » en petite barre (—).
+  // En petite barre, le panneau ajoute .reduit au body : on ne montre plus que la barre, sans aucune tâche.
+  if (/TachesPanneau\/([3-9]|\d\d)/.test(navigator.userAgent)) {
+    masquer.textContent = '✕';
+    masquer.title = 'Masquer complètement (Ctrl+Alt+T pour revenir)';
+    const reduire = document.createElement('button');
+    reduire.className = 'btn-reduire';
+    reduire.type = 'button';
+    reduire.title = 'Réduire en petite barre';
+    reduire.setAttribute('aria-label', 'Réduire le panneau en petite barre');
+    reduire.textContent = '—';
+    reduire.addEventListener('click', () => window.open('taches://reduire'));
+    document.body.append(reduire);
+    const barre = document.createElement('div');
+    barre.className = 'barre-reduite';
+    barre.innerHTML = '<span class="poignee">Tâches</span>' +
+      '<button type="button" class="agrandir" title="Agrandir" aria-label="Agrandir le panneau">▢</button>' +
+      '<button type="button" class="fermer" title="Masquer complètement" aria-label="Masquer le panneau">✕</button>';
+    barre.querySelector('.agrandir').addEventListener('click', () => window.open('taches://agrandir'));
+    barre.querySelector('.fermer').addEventListener('click', () => window.open('taches://masquer'));
+    // Position verrouillée : la barre ne se déplace plus, un clic sur « Tâches » rouvre le panneau.
+    barre.querySelector('.poignee').addEventListener('click', () => {
+      if (document.body.classList.contains('verrouille')) window.open('taches://agrandir');
+    });
+    document.body.append(barre);
+    document.body.classList.add('panneau3');
+  }
   document.body.classList.add('panneau');
 }
 

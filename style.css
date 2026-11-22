@@ -256,6 +256,32 @@ body.verrouille .btn-verrou::before { content: "🔒"; }
 body.verrouille .btn-verrou { border-color: var(--accent); }
 body.panneau:has(.btn-verrou) .entete { padding-right: 76px; }
 
+/* Panneau 3 : ✕ masquer complètement, — réduire en petite barre, cadenas */
+.btn-reduire {
+  position: fixed; top: 6px; right: 40px; z-index: 30;
+  width: 28px; height: 28px; border-radius: 50%; padding: 0; line-height: 1;
+  border: 1px solid var(--ligne); background: var(--carte); color: var(--discret); font-size: 14px;
+  -webkit-app-region: no-drag; app-region: no-drag;
+}
+.btn-reduire:hover { color: var(--texte); border-color: var(--discret); }
+body.panneau3 .btn-verrou { right: 74px; }
+body.panneau3 .entete { padding-right: 110px; }
+body.panneau3 .connexion { padding-right: 76px; }
+.barre-reduite { display: none; }
+body.reduit { overflow: hidden; }
+body.reduit > *:not(.barre-reduite) { display: none !important; }
+body.reduit .barre-reduite {
+  display: flex; align-items: center; gap: 4px; position: fixed; inset: 0; padding: 0 4px 0 12px;
+  background: var(--carte); border: 1px solid var(--ligne); box-sizing: border-box; font-size: 14px; color: var(--texte);
+}
+.barre-reduite .poignee { flex: 1; font-weight: 600; cursor: default; -webkit-app-region: drag; app-region: drag; user-select: none; }
+body.verrouille .barre-reduite .poignee { -webkit-app-region: no-drag; app-region: no-drag; cursor: pointer; }
+.barre-reduite button {
+  width: 26px; height: 26px; border-radius: 50%; padding: 0; line-height: 1; font-size: 13px;
+  border: none; background: none; color: var(--discret); -webkit-app-region: no-drag; app-region: no-drag;
+}
+.barre-reduite button:hover { color: var(--texte); background: var(--fond); }
+
 /* Sous-tâches : l'arbre sous la tâche parent, relié par un trait */
 .items > .branche { margin: -2px 0 0 18px; padding-left: 12px; border-left: 2px solid var(--ligne); list-style: none; }
 .items > .branche > .items { margin-top: 0; }

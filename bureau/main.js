@@ -14,6 +14,7 @@ const ADRESSE = 'https://jep317.github.io/tacheGestion/';
 const RACCOURCI_PANNEAU = 'Control+Alt+T';
 const RACCOURCI_AJOUT = 'Control+Alt+N';
 const LARGEUR = 420;
+const BARRE = { width: 150, height: 36 }; // panneau réduit : une petite barre « Tâches »
 
 // Retouches d'affichage propres au panneau : on peut déplacer la fenêtre par l'en-tête,
 // et le micro est caché (la dictée du navigateur ne marche pas ici ; Windows+H dicte dans n'importe quel champ).
@@ -32,7 +33,7 @@ app.userAgentFallback = app.userAgentFallback
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/[^\x20-\x7e]/g, '') +
   // Marqueur lu par le site : il n'affiche le bouton « masquer » que dans un panneau qui sait le traiter.
-  ' TachesPanneau/2'; // 2 : sait aussi verrouiller la position
+  ' TachesPanneau/3'; // 2 : sait aussi verrouiller la position ; 3 : sait se réduire en petite barre
 const premiereInstance = app.requestSingleInstanceLock();
 if (!premiereInstance) app.quit();
 
@@ -86,7 +87,7 @@ function creerFenetre({ visible }) {
   fenetre.loadURL(ADRESSE);
 
   fenetre.webContents.on('dom-ready', () => {
-    if (!horsLigne) { fenetre.webContents.insertCSS(CSS_PANNEAU); signalerVerrou(); }
+    if (!horsLigne) { fenetre.webContents.insertCSS(CSS_PANNEAU); signalerEtat(); }
   });
   fenetre.webContents.on('did-fail-load', (_e, code, _desc, url, principal) => {
     if (!principal || code === -3) return; // -3 : chargement annulé, sans importance
@@ -100,6 +101,8 @@ function creerFenetre({ visible }) {
   fenetre.webContents.setWindowOpenHandler(({ url }) => {
     if (url === 'taches://masquer') fenetre.hide(); // bouton « masquer » du site
     else if (url === 'taches://verrou') verrouiller(!reglages.verrouille); // bouton cadenas du site
+    else if (url === 'taches://reduire') reduire(true); // bouton « réduire » du site
+    else if (url === 'taches://agrandir') reduire(false); // bouton de la petite barre
     else if (/^https?:/.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
@@ -111,7 +114,13 @@ function creerFenetre({ visible }) {
     if (entree.type === 'keyDown' && entree.key === 'Escape') { e.preventDefault(); fenetre.hide(); }
   });
 
-  const memoriserCadre = () => { if (!fenetre.isMinimized()) enregistrer({ cadre: fenetre.getBounds() }); };
+  // En petite barre, on retient la place de la barre sans toucher au cadre du panneau ouvert.
+  const memoriserCadre = () => {
+    if (fenetre.isMinimized()) return;
+    const b = fenetre.getBounds();
+    if (reglages.reduit) enregistrer({ barre: { x: b.x, y: b.y } });
+    else enregistrer({ cadre: b });
+  };
   fenetre.on('moved', memoriserCadre);
   fenetre.on('resized', memoriserCadre);
 
@@ -120,7 +129,7 @@ function creerFenetre({ visible }) {
   fenetre.on('hide', () => installerMaj());
   fenetre.on('blur', () => installerMaj());
 
-  appliquerVerrou();
+  appliquerTaille();
   fenetre.once('ready-to-show', () => {
     if (visible === 'actif') { fenetre.show(); fenetre.focus(); }
     else if (visible) fenetre.showInactive();
@@ -137,14 +146,43 @@ function appliquerVerrou() {
   if (!fenetre) return;
   const v = !!reglages.verrouille;
   fenetre.setMovable(!v);
-  fenetre.setResizable(!v);
-  signalerVerrou();
+  fenetre.setResizable(!v && !reglages.reduit);
+  signalerEtat();
 }
-// Le site affiche le cadenas fermé ou ouvert, et coupe la zone de déplacement quand c'est verrouillé.
-function signalerVerrou() {
+// Le site affiche le cadenas fermé ou ouvert (et coupe la zone de déplacement quand c'est verrouillé),
+// et ne montre plus que la petite barre quand le panneau est réduit.
+function signalerEtat() {
   if (!fenetre || horsLigne) return;
   fenetre.webContents.executeJavaScript(
-    `document.body.classList.toggle('verrouille', ${!!reglages.verrouille})`).catch(() => {});
+    `document.body.classList.toggle('verrouille', ${!!reglages.verrouille});` +
+    `document.body.classList.toggle('reduit', ${!!reglages.reduit});`).catch(() => {});
+}
+
+// Petite barre : le panneau se réduit à une barre « Tâches » (aucune tâche visible), pour travailler
+// sans être distrait ; ▢ ou un clic rouvre le panneau à sa place. Le choix est gardé au redémarrage.
+function reduire(oui) {
+  if (!fenetre) return;
+  if (!!reglages.reduit === oui) return;
+  if (oui && !fenetre.isMinimized()) enregistrer({ cadre: fenetre.getBounds() });
+  enregistrer({ reduit: oui });
+  appliquerTaille();
+  if (!fenetre.isVisible()) fenetre.showInactive();
+  if (icone) icone.setContextMenu(construireMenu());
+}
+function appliquerTaille() {
+  if (!fenetre) return;
+  fenetre.setResizable(true); // le temps de changer de taille ; le verrou est réappliqué juste après
+  if (reglages.reduit) {
+    fenetre.setMinimumSize(BARRE.width, BARRE.height);
+    const c = cadreValide(reglages.cadre) ? reglages.cadre : cadreParDefaut();
+    let pos = { x: c.x + c.width - BARRE.width, y: c.y };
+    if (reglages.barre && cadreValide({ ...reglages.barre, ...BARRE, width: 200, height: 100 })) pos = reglages.barre;
+    fenetre.setBounds({ ...pos, ...BARRE });
+  } else {
+    fenetre.setMinimumSize(300, 300);
+    fenetre.setBounds(cadreValide(reglages.cadre) ? reglages.cadre : cadreParDefaut());
+  }
+  appliquerVerrou();
 }
 
 function montrer() {
@@ -160,6 +198,7 @@ function basculer() {
   else montrer(); // visible mais derrière d'autres fenêtres : on le ramène devant
 }
 function ajoutRapide() {
+  reduire(false);
   montrer();
   fenetre.webContents.focus();
   fenetre.webContents.executeJavaScript(`
@@ -196,10 +235,17 @@ function construireMenu() {
       click: (item) => reglerDemarrage(item.checked),
     }]),
     {
+      label: 'Réduire en petite barre', type: 'checkbox', checked: !!reglages.reduit,
+      click: (item) => { reduire(item.checked); montrer(); },
+    },
+    {
       label: 'Verrouiller la position', type: 'checkbox', checked: !!reglages.verrouille,
       click: (item) => verrouiller(item.checked),
     },
-    { label: 'Remettre le panneau à droite', click: () => { fenetre.setBounds(cadreParDefaut()); montrer(); } },
+    { label: 'Remettre le panneau à droite', click: () => {
+      enregistrer({ cadre: cadreParDefaut(), barre: null });
+      appliquerTaille(); montrer();
+    } },
     { type: 'separator' },
     { label: 'Quitter', click: () => { quitter = true; app.quit(); } },
   ]);
