@@ -318,8 +318,82 @@ object Supabase {
         requete("DELETE", "/rest/v1/checklist?id=eq.$id&coche=is.true", null, jeton(ctx), "return=minimal")
     }
 
-    private fun journal(jeton: String, id: String, action: String, avant: JSONObject?, apres: JSONObject) {
-        val corps = JSONObject().put("item_id", id).put("action", action).put("par", "appli").put("apres", apres)
+    // ---------- priorités (déplacement par Jérémie, comme le glisser-déposer de l'appli web) ----------
+    class Place(val horizon: String, val rang: Int, val total: Int)
+
+    private fun voisins(j: String, horizon: String): List<Pair<String, Int?>> {
+        val t = JSONArray(requete(
+            "GET",
+            "/rest/v1/items?select=id,ordre&horizon=eq.$horizon&etat=in.(a_faire,en_cours)&type=in.(tache,course)" +
+                "&order=ordre.asc.nullslast,cree_le.asc",
+            null, j,
+        ))
+        return (0 until t.length()).map { n ->
+            val o = t.getJSONObject(n)
+            o.getString("id") to (if (o.isNull("ordre")) null else o.getInt("ordre"))
+        }
+    }
+
+    /** Place actuelle de la tâche dans son horizon (null si elle n'est pas encore rangée). */
+    fun place(ctx: Context, id: String): Place? {
+        val j = jeton(ctx)
+        val moi = JSONArray(requete("GET", "/rest/v1/items?select=horizon,etat&id=eq.${URLEncoder.encode(id, "UTF-8")}", null, j))
+        if (moi.length() == 0) throw ErreurApi(404, "Élément introuvable")
+        val o = moi.getJSONObject(0)
+        if (o.isNull("horizon") || o.optString("etat") == "a_trier") return null
+        val h = o.getString("horizon")
+        val v = voisins(j, h)
+        val k = v.indexOfFirst { it.first == id }
+        return Place(h, if (k < 0) v.size + 1 else k + 1, if (k < 0) v.size + 1 else v.size)
+    }
+
+    /**
+     * Range la tâche dans [horizon] : [cible] = 0 en tête, -1 en dernier, sinon un décalage (-1 = monter d'un cran,
+     * +1 = descendre) quand l'horizon ne change pas. Renumérote l'ordre de l'horizon (1 = en tête) et l'inscrit
+     * au journal (« deplace », par jeremie) pour que le tri de Claude le respecte.
+     */
+    fun deplacer(ctx: Context, id: String, horizon: String, mode: String): Place {
+        val j = jeton(ctx)
+        val moi = JSONArray(requete("GET", "/rest/v1/items?select=horizon,ordre,etat&id=eq.${URLEncoder.encode(id, "UTF-8")}", null, j))
+        if (moi.length() == 0) throw ErreurApi(404, "Élément introuvable")
+        val o = moi.getJSONObject(0)
+        val ancienH: String? = if (o.isNull("horizon")) null else o.getString("horizon")
+        val ancienOrdre: Any = if (o.isNull("ordre")) JSONObject.NULL else o.getInt("ordre")
+        val aTrier = o.optString("etat") == "a_trier"
+
+        val liste = voisins(j, horizon).toMutableList()
+        val avant = liste.indexOfFirst { it.first == id }
+        val sansMoi = liste.filter { it.first != id }.toMutableList()
+        var pos = when (mode) {
+            "tete" -> 0
+            "monter" -> if (avant < 0) sansMoi.size else (avant - 1).coerceAtLeast(0)
+            "descendre" -> if (avant < 0) sansMoi.size else (avant + 1).coerceAtMost(sansMoi.size)
+            else -> sansMoi.size // « fin » : dernier de l'horizon choisi
+        }
+        if (pos > sansMoi.size) pos = sansMoi.size
+        sansMoi.add(pos, id to null)
+
+        sansMoi.forEachIndexed { k, (autre, ordre) ->
+            val champs = JSONObject()
+            if (autre == id) {
+                champs.put("ordre", k + 1)
+                if (ancienH != horizon) champs.put("horizon", horizon)
+                if (aTrier) champs.put("etat", "a_faire")
+            } else if (ordre != k + 1) {
+                champs.put("ordre", k + 1)
+            }
+            if (champs.length() > 0) {
+                requete("PATCH", "/rest/v1/items?id=eq.${URLEncoder.encode(autre, "UTF-8")}", champs.toString(), j, "return=minimal")
+            }
+        }
+        val avantJ = JSONObject().put("horizon", ancienH ?: JSONObject.NULL).put("ordre", ancienOrdre)
+        if (aTrier) avantJ.put("etat", "a_trier")
+        journal(j, id, "deplace", avantJ, JSONObject().put("horizon", horizon).put("ordre", pos + 1), par = "jeremie")
+        return Place(horizon, pos + 1, sansMoi.size)
+    }
+
+    private fun journal(jeton: String, id: String, action: String, avant: JSONObject?, apres: JSONObject, par: String = "appli") {
+        val corps = JSONObject().put("item_id", id).put("action", action).put("par", par).put("apres", apres)
         if (avant != null) corps.put("avant", avant)
         try { requete("POST", "/rest/v1/journal", corps.toString(), jeton, "return=minimal") } catch (_: Exception) {}
     }

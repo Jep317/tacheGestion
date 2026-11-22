@@ -48,6 +48,7 @@ Petite appli Android native (Kotlin, sans bibliothèque) qui pose un **widget** 
 
 - La liste : À trier, Maintenant, Bientôt, puis le nombre d'éléments Plus tard / Un jour.
 - Onglets **Tâches / Notes** en haut du widget : l’onglet Notes montre les notes et idées rangées par projet.
+- **Priorités** : toucher une tâche, puis « En tête », « Monter », « Descendre » ou un autre horizon. Inscrit au journal (`deplace`, par `jeremie`) comme le glisser-déposer de l’appli web, pour que Claude le respecte.
 - **+** : ajout rapide au clavier. **Micro** : dictée Google en français. Tout arrive « à trier » (`source` = `widget` ou `vocal`).
 - Toucher une tâche : son détail, avec « ✓ Fait » et « En cours ». « Tâches » en haut ouvre l'appli web complète.
 - Mise à jour toutes les 30 minutes, après chaque ajout ou changement, et avec ↻. Garde la dernière liste hors ligne.
