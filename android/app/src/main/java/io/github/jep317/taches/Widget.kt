@@ -37,6 +37,7 @@ class WidgetTaches : AppWidgetProvider() {
 
         /** Redessine les widgets et recharge la liste depuis Supabase. */
         fun actualiser(ctx: Context) {
+            Rappels.programmerSynchro(ctx) // les rappels se resynchronisent en même temps que la liste
             val g = AppWidgetManager.getInstance(ctx)
             val ids = ids(ctx)
             if (ids.isEmpty()) return
