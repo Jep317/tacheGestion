@@ -263,16 +263,46 @@ async function journal(item_id, action, avant, apres) {
 
 /** Marque une tâche faite. Si elle a des sous-tâches ouvertes, propose de les clore aussi ;
  *  si c'était la dernière sous-tâche ouverte de son parent, propose de clore le parent. */
-async function terminer(item) {
+/** Petite fenêtre de confirmation (confirm() est bloqué ou laid selon les appareils). Résout true / false. */
+function demander(titre, texte, oui = 'Oui', non = 'Annuler') {
+  return new Promise((resoudre) => {
+    const voile = document.createElement('div');
+    voile.className = 'voile';
+    voile.innerHTML = `<div class="fenetre confirmer" role="alertdialog" aria-modal="true" aria-labelledby="titre-confirmer">
+      <h2 id="titre-confirmer">${echap(titre)}</h2>
+      ${texte ? `<p class="texte-confirmer">${echap(texte)}</p>` : ''}
+      <p class="fin"><button type="button" class="lien" data-non>${echap(non)}</button>
+      <button type="button" class="principal" data-oui>${echap(oui)}</button></p></div>`;
+    const finir = (r) => { voile.remove(); document.removeEventListener('keydown', clavier, true); resoudre(r); };
+    const clavier = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); finir(false); }
+      else if (e.key === 'Enter') { e.preventDefault(); finir(true); }
+    };
+    voile.addEventListener('click', (e) => {
+      if (e.target === voile || e.target.closest('[data-non]')) finir(false);
+      else if (e.target.closest('[data-oui]')) finir(true);
+    });
+    document.addEventListener('keydown', clavier, true);
+    document.body.append(voile);
+    voile.querySelector('[data-oui]').focus();
+  });
+}
+
+async function terminer(item, { sansConfirmer = false } = {}) {
   const ouverts = descendants(item.id);
-  if (ouverts.length && !confirm(`« ${libelle(item)} » a encore ${ouverts.length} sous-tâche(s) pas finie(s). Tout marquer comme fait ?`)) return;
+  if (!sansConfirmer || ouverts.length) {
+    const ok = await demander('Terminer cette tâche ?', ouverts.length
+      ? `« ${libelle(item)} » a encore ${ouverts.length} sous-tâche${ouverts.length > 1 ? 's' : ''} pas finie${ouverts.length > 1 ? 's' : ''} : tout sera marqué comme fait.`
+      : libelle(item), 'Terminer');
+    if (!ok) return;
+  }
   const touches = [item, ...ouverts];
   const anciens = touches.map((t) => [t, t.etat]);
   await Promise.all(touches.map((t) => changerEtat(t, 'fait', { recharger: false })));
   await charger();
   const parent = etat.items.find((p) => p.id === item.parent_id);
   if (parent && !sousTaches(parent.id).length) {
-    toast(`Toutes les sous-tâches de « ${libelle(parent)} » sont faites.`, { nom: 'Clore la tâche', faire: () => terminer(parent) });
+    toast(`Toutes les sous-tâches de « ${libelle(parent)} » sont faites.`, { nom: 'Clore la tâche', faire: () => terminer(parent, { sansConfirmer: true }) });
   } else {
     toast('Fait : ' + libelle(item) + (ouverts.length ? ` (+ ${ouverts.length})` : ''), {
       nom: 'Annuler',
