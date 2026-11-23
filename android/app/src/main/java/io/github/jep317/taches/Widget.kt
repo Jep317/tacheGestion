@@ -196,7 +196,7 @@ class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteView
 
     private sealed class Ligne {
         /** [cle] non nulle : en-tête repliable (rubrique de tâches, sujet ou groupe de notes), [ouvert] = déplié. */
-        class Entete(val nom: String, val compte: Int, val cle: String? = null, val ouvert: Boolean = true) : Ligne()
+        class Entete(val nom: String, val compte: Int, val cle: String? = null, val ouvert: Boolean = true, val groupe: Boolean = false) : Ligne()
         class Tache(val item: Supabase.Item) : Ligne()
         class Info(val texte: String) : Ligne()
         class Courses(val restants: Int) : Ligne()
@@ -207,7 +207,7 @@ class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteView
     override fun onCreate() {}
     override fun onDestroy() {}
     override fun getCount() = lignes.size
-    override fun getViewTypeCount() = 3
+    override fun getViewTypeCount() = 4
     override fun getItemId(position: Int) = position.toLong()
     override fun hasStableIds() = false
     override fun getLoadingView(): RemoteViews? = null
@@ -270,7 +270,7 @@ class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteView
             parGroupe.keys.filterNotNull().sortedBy { it.lowercase(Locale.FRANCE) }.forEach { gr ->
                 val cleG = cle + ">" + gr.lowercase(Locale.FRANCE)
                 val ouvertG = cleG in ouverts
-                res += Ligne.Entete("   $gr", parGroupe.getValue(gr).size, cleG, ouvertG)
+                res += Ligne.Entete(gr, parGroupe.getValue(gr).size, cleG, ouvertG, groupe = true)
                 if (ouvertG) parGroupe.getValue(gr).forEach { res += Ligne.Tache(it) }
             }
         }
@@ -320,11 +320,11 @@ class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteView
     override fun getViewAt(position: Int): RemoteViews {
         val l = lignes.getOrNull(position) ?: return RemoteViews(ctx.packageName, R.layout.ligne_info)
         return when (l) {
-            is Ligne.Entete -> RemoteViews(ctx.packageName, R.layout.ligne_entete).apply {
+            is Ligne.Entete -> RemoteViews(ctx.packageName, if (l.groupe) R.layout.ligne_groupe else R.layout.ligne_entete).apply {
                 setTextViewText(R.id.nom, if (l.cle == null) l.nom else (if (l.ouvert) "▾ " else "▸ ") + l.nom)
                 setTextViewText(R.id.compte, l.compte.toString())
                 // Repliable : la ligne prend un fond de bouton pour se toucher facilement.
-                setInt(R.id.entete, "setBackgroundResource", if (l.cle != null) R.drawable.fond_ligne else 0)
+                if (!l.groupe) setInt(R.id.entete, "setBackgroundResource", if (l.cle != null) R.drawable.fond_ligne else 0)
                 if (l.cle != null) {
                     setOnClickFillInIntent(
                         R.id.entete,
