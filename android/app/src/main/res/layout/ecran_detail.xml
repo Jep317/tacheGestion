@@ -19,10 +19,47 @@
             android:layout_gravity="center_horizontal"
             android:background="@drawable/fond_poignee" />
 
+        <!-- Barre du haut, convention Android : ✕ à gauche pour fermer (comme le bouton retour
+             ou glisser la fiche vers le bas), ✏ à droite pour modifier. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
+            android:layout_marginStart="-12dp"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="-8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btn_fermer"
+                style="@style/Bouton.Lien"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="Fermer"
+                android:text="✕"
+                android:textColor="@color/texte"
+                android:textSize="22sp" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <Button
+                android:id="@+id/btn_editer"
+                style="@style/Bouton.Lien"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:contentDescription="Modifier le titre et le texte"
+                android:text="✏️ Modifier"
+                android:textColor="@color/texte"
+                android:textSize="15sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
             android:gravity="top"
             android:orientation="horizontal">
 
@@ -35,17 +72,6 @@
                 android:textSize="20sp"
                 android:textStyle="bold" />
 
-            <!-- ✏ : modifier le titre et le texte. -->
-            <Button
-                android:id="@+id/btn_editer"
-                style="@style/Bouton.Lien"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:layout_marginTop="-8dp"
-                android:contentDescription="Modifier le titre et le texte"
-                android:text="✏️"
-                android:textSize="18sp" />
         </LinearLayout>
 
         <TextView
@@ -244,13 +270,6 @@
                 android:layout_height="wrap_content"
                 android:text="Supprimer"
                 android:textColor="#B23A3A" />
-
-            <Button
-                android:id="@+id/btn_fermer"
-                style="@style/Bouton.Lien"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Fermer" />
 
             <View
                 android:layout_width="0dp"

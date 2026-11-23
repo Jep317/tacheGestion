@@ -192,6 +192,11 @@ object Supabase {
                 Cache.ecrireCourses(ctx, (lignesTotal[idCourses] ?: 0) - (cochees[idCourses] ?: 0))
             }
         } catch (_: Exception) {}
+        // Catégories dans l'ordre choisi par Jérémie (même ordre et mêmes couleurs que l'appli PC).
+        try {
+            val c = JSONArray(requete("GET", "/rest/v1/categories?select=nom&order=ordre.asc,nom.asc", null, j))
+            Cache.ecrireCategories(ctx, (0 until c.length()).map { c.getJSONObject(it).optString("nom") }.filter { it.isNotBlank() })
+        } catch (_: Exception) {}
         val texte = liste.toString()
         Cache.ecrire(ctx, texte)
         return analyser(texte)
@@ -501,5 +506,11 @@ object Cache {
     fun date(ctx: Context): Long = p(ctx).getLong("le", 0)
     fun ecrireCourses(ctx: Context, n: Int) = p(ctx).edit().putInt("courses", n).apply()
     fun courses(ctx: Context): Int = p(ctx).getInt("courses", -1)
+    fun ecrireCategories(ctx: Context, noms: List<String>) =
+        p(ctx).edit().putString("categories", JSONArray(noms).toString()).apply()
+    fun categories(ctx: Context): List<String> = try {
+        val a = JSONArray(p(ctx).getString("categories", "[]"))
+        (0 until a.length()).map { a.getString(it) }
+    } catch (_: Exception) { emptyList() }
     fun vider(ctx: Context) = p(ctx).edit().clear().apply()
 }

@@ -7,4 +7,13 @@
     <color name="ligne">#E2DBCF</color>
     <color name="accent">#2F6F5E</color>
     <color name="accent_texte">#FFFFFF</color>
+    <!-- Couleurs des catégories, dans leur ordre (comme l'appli PC). -->
+    <color name="c0">#3D6FA8</color>
+    <color name="c1">#B5651D</color>
+    <color name="c2">#2F7D4F</color>
+    <color name="c3">#8A4FA8</color>
+    <color name="c4">#B23A6A</color>
+    <color name="c5">#7A6A1D</color>
+    <color name="c6">#1D7A7A</color>
+    <color name="c7">#A8503D</color>
 </resources>
