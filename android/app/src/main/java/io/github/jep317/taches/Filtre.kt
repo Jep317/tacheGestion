@@ -13,7 +13,6 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -21,13 +20,18 @@ import java.util.Locale
 
 /**
  * Filtre d'un widget, comme les pastilles de l'appli PC : un panneau qui monte du bas,
- * une rangée de pastilles « Catégorie » et une rangée « Sujet ». Chaque toucher s'applique tout de suite.
+ * une rangée de pastilles « Catégorie » et une rangée « Sujet ». Toucher une pastille applique et ferme ;
+ * glisser vers le bas, toucher à côté ou le bouton retour ferment sans rien changer.
  */
 class FiltreActivity : Activity() {
     companion object {
         const val EFFACER = "effacer"
         private val COULEURS = intArrayOf(R.color.c0, R.color.c1, R.color.c2, R.color.c3, R.color.c4, R.color.c5, R.color.c6, R.color.c7)
     }
+
+    private val glisse = GlisserPourFermer(this)
+    override fun dispatchTouchEvent(e: android.view.MotionEvent): Boolean =
+        glisse.traiter(e) { super.dispatchTouchEvent(it) }
 
     private var id = AppWidgetManager.INVALID_APPWIDGET_ID
     private var items: List<Supabase.Item> = emptyList()
@@ -54,7 +58,7 @@ class FiltreActivity : Activity() {
         fun dp(n: Int) = (n * d).toInt()
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(10), dp(20), dp(20))
+            setPadding(dp(20), dp(10), dp(20), dp(28))
         }
         col.addView(View(this).apply { setBackgroundResource(R.drawable.fond_poignee) },
             LinearLayout.LayoutParams(dp(36), dp(4)).apply { gravity = Gravity.CENTER_HORIZONTAL })
@@ -80,20 +84,6 @@ class FiltreActivity : Activity() {
         rangeeSujet = Rangee(this, dp(8))
         col.addView(rangeeSujet)
 
-        val bas = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            setPadding(0, dp(20), 0, 0)
-        }
-        bas.addView(Button(this, null, 0, R.style.Bouton_Lien).apply {
-            text = "Tout voir"
-            setOnClickListener { appliquer(null, null); finish() }
-        })
-        bas.addView(Button(this, null, 0, R.style.Bouton_Principal).apply {
-            text = "OK"
-            setOnClickListener { finish() }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(8) })
-        col.addView(bas)
 
         setContentView(ScrollView(this).apply { addView(col) })
         window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT)
@@ -142,7 +132,7 @@ class FiltreActivity : Activity() {
         // Le sujet choisi est gardé seulement s'il existe encore dans la nouvelle catégorie.
         val p = proj?.takeIf { s -> items.any { dansCategorie(it, c) && dansOnglet(it) && (if (s.isEmpty()) it.projet.isNullOrBlank() else it.projet?.trim() == s) } }
         appliquer(c, p)
-        remplir()
+        finish()
     }
 
     private fun choisirSujet(s: String?) {

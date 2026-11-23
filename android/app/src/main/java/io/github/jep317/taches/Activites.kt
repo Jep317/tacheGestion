@@ -419,46 +419,10 @@ class DetailActivity : Activity() {
         }
     }
 
-    // ---------- glisser la fiche vers le bas pour la fermer (convention des panneaux du bas) ----------
-    private var glisseDepart = -1f
-    private var glisseX = 0f
-    private var glisse = false
-
-    override fun dispatchTouchEvent(e: android.view.MotionEvent): Boolean {
-        val defile = (findViewById<android.view.ViewGroup>(android.R.id.content).getChildAt(0) as? android.widget.ScrollView)
-        val decor = window.decorView
-        when (e.actionMasked) {
-            android.view.MotionEvent.ACTION_DOWN -> {
-                glisseDepart = if ((defile?.scrollY ?: 0) == 0) e.rawY else -1f
-                glisseX = e.rawX
-                glisse = false
-            }
-            android.view.MotionEvent.ACTION_MOVE -> if (glisseDepart >= 0) {
-                val dy = e.rawY - glisseDepart
-                if (!glisse && dy > dp(12) && dy > 2 * kotlin.math.abs(e.rawX - glisseX)) {
-                    glisse = true
-                    // Les boutons sous le doigt ne doivent pas recevoir de « toucher ».
-                    super.dispatchTouchEvent(android.view.MotionEvent.obtain(e).apply { action = android.view.MotionEvent.ACTION_CANCEL })
-                }
-                if (glisse) { decor.translationY = maxOf(0f, dy); return true }
-                if (dy < -dp(12)) glisseDepart = -1f
-            }
-            android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> if (glisse) {
-                glisse = false
-                if (decor.translationY > dp(110)) {
-                    decor.animate().translationY(decor.height.toFloat()).setDuration(160).withEndAction {
-                        finish()
-                        @Suppress("DEPRECATION")
-                        overridePendingTransition(0, 0)
-                    }.start()
-                } else {
-                    decor.animate().translationY(0f).setDuration(160).start()
-                }
-                return true
-            }
-        }
-        return super.dispatchTouchEvent(e)
-    }
+    // Glisser la fiche vers le bas pour la fermer (convention des panneaux du bas).
+    private val glisse = GlisserPourFermer(this)
+    override fun dispatchTouchEvent(e: android.view.MotionEvent): Boolean =
+        glisse.traiter(e) { super.dispatchTouchEvent(it) }
 
     // ---------- contenu de la fiche, édition du titre et du texte, menu ＋ ----------
     private var fiche: Supabase.Fiche? = null
@@ -761,5 +725,52 @@ class ConfirmerActivity : Activity() {
             }
             .setOnDismissListener { finish() }
             .show()
+    }
+}
+
+/**
+ * Panneau du bas qu'on ferme en le glissant vers le bas, quand son contenu est défilé tout en haut.
+ * À appeler depuis dispatchTouchEvent de l'activité.
+ */
+class GlisserPourFermer(private val a: Activity) {
+    private var depart = -1f
+    private var x0 = 0f
+    private var enCours = false
+    private fun dp(n: Int) = n * a.resources.displayMetrics.density
+
+    fun traiter(e: android.view.MotionEvent, suite: (android.view.MotionEvent) -> Boolean): Boolean {
+        val defile = a.findViewById<android.view.ViewGroup>(android.R.id.content).getChildAt(0) as? android.widget.ScrollView
+        val decor = a.window.decorView
+        when (e.actionMasked) {
+            android.view.MotionEvent.ACTION_DOWN -> {
+                depart = if ((defile?.scrollY ?: 0) == 0) e.rawY else -1f
+                x0 = e.rawX
+                enCours = false
+            }
+            android.view.MotionEvent.ACTION_MOVE -> if (depart >= 0) {
+                val dy = e.rawY - depart
+                if (!enCours && dy > dp(12) && dy > 2 * kotlin.math.abs(e.rawX - x0)) {
+                    enCours = true
+                    // Les boutons sous le doigt ne doivent pas recevoir de « toucher ».
+                    suite(android.view.MotionEvent.obtain(e).apply { action = android.view.MotionEvent.ACTION_CANCEL })
+                }
+                if (enCours) { decor.translationY = maxOf(0f, dy); return true }
+                if (dy < -dp(12)) depart = -1f
+            }
+            android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> if (enCours) {
+                enCours = false
+                if (decor.translationY > dp(90)) {
+                    decor.animate().translationY(decor.height.toFloat()).setDuration(160).withEndAction {
+                        a.finish()
+                        @Suppress("DEPRECATION")
+                        a.overridePendingTransition(0, 0)
+                    }.start()
+                } else {
+                    decor.animate().translationY(0f).setDuration(160).start()
+                }
+                return true
+            }
+        }
+        return suite(e)
     }
 }
