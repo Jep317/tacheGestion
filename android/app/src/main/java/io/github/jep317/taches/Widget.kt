@@ -17,7 +17,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-// Widget de l'écran d'accueil : la liste (À trier, Maintenant, Bientôt), et les boutons Ajouter, Dicter, Actualiser.
+// Widget de l'écran d'accueil : la liste (À trier, Maintenant, Bientôt, Plus tard, Un jour, repliables), et les boutons Ajouter, Dicter, Actualiser.
 class WidgetTaches : AppWidgetProvider() {
 
     override fun onUpdate(ctx: Context, gestionnaire: AppWidgetManager, ids: IntArray) {
@@ -57,7 +57,10 @@ class WidgetTaches : AppWidgetProvider() {
         fun onglet(ctx: Context, id: Int): String =
             ctx.getSharedPreferences("widget", Context.MODE_PRIVATE).getString("onglet_$id", TACHES) ?: TACHES
 
-        /** Sujets et groupes de notes dépliés dans un widget (repliés par défaut). */
+        /**
+         * Rubriques basculées dans un widget. Sujets et groupes de notes : présents = dépliés (repliés par défaut).
+         * Rubriques de tâches (« t:… ») : présentes = l'inverse de leur état par défaut.
+         */
         fun sectionsOuvertes(ctx: Context, id: Int): Set<String> =
             ctx.getSharedPreferences("widget", Context.MODE_PRIVATE).getStringSet("ouverts_$id", emptySet()) ?: emptySet()
 
@@ -180,7 +183,7 @@ class ServiceListe : RemoteViewsService() {
 class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteViewsService.RemoteViewsFactory {
 
     private sealed class Ligne {
-        /** [cle] non nulle : en-tête repliable (sujet ou groupe de notes), [ouvert] = déplié. */
+        /** [cle] non nulle : en-tête repliable (rubrique de tâches, sujet ou groupe de notes), [ouvert] = déplié. */
         class Entete(val nom: String, val compte: Int, val cle: String? = null, val ouvert: Boolean = true) : Ligne()
         class Tache(val item: Supabase.Item) : Ligne()
         class Info(val texte: String) : Ligne()
@@ -280,25 +283,25 @@ class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteView
         val jour = java.time.LocalDate.now(java.time.ZoneId.of("Europe/Paris")).toString()
         val prio = items.filter { it.prioriteJour == jour && (it.etat == "a_faire" || it.etat == "en_cours") }
             .sortedBy { it.prioriteRang }
-        if (prio.isNotEmpty()) {
-            res += Ligne.Entete("Aujourd'hui", prio.size)
-            prio.forEach { res += Ligne.Tache(it) }
+        // Chaque rubrique se replie d'un toucher sur son titre ; l'état est mémorisé par widget.
+        // Aujourd'hui, À trier, Maintenant et Bientôt sont dépliées par défaut, Plus tard et Un jour repliées.
+        val bascules = WidgetTaches.sectionsOuvertes(ctx, widgetId)
+        fun rubrique(cle: String, nom: String, liste: List<Supabase.Item>, ouverteParDefaut: Boolean, videAussi: Boolean) {
+            if (liste.isEmpty() && !videAussi) return
+            val k = "t:$cle"
+            val ouvert = ouverteParDefaut != (k in bascules)
+            res += Ligne.Entete(nom, liste.size, k, ouvert)
+            if (!ouvert) return
+            if (liste.isEmpty()) res += Ligne.Info("Rien ici.")
+            liste.forEach { res += Ligne.Tache(it) }
         }
-        val aTrier = items.filter { it.etat == "a_trier" }
-        if (aTrier.isNotEmpty()) {
-            res += Ligne.Entete("À trier", aTrier.size)
-            aTrier.forEach { res += Ligne.Tache(it) }
-        }
+        rubrique("aujourdhui", "Aujourd'hui", prio, true, false)
+        rubrique("a_trier", "À trier", items.filter { it.etat == "a_trier" }, true, false)
         fun horizon(cle: String) = items.filter { it.etat != "a_trier" && it.horizon == cle && it.type in listes }
-        for ((cle, nom) in listOf("maintenant" to "Maintenant", "bientot" to "Bientôt")) {
-            val h = horizon(cle)
-            res += Ligne.Entete(nom, h.size)
-            if (h.isEmpty()) res += Ligne.Info("Rien ici.")
-            h.forEach { res += Ligne.Tache(it) }
-        }
-        val plusTard = horizon("plus_tard").size
-        val unJour = horizon("un_jour").size
-        if (plusTard + unJour > 0) res += Ligne.Info("Plus tard : $plusTard · Un jour : $unJour — toucher pour tout voir")
+        rubrique("maintenant", "Maintenant", horizon("maintenant"), true, true)
+        rubrique("bientot", "Bientôt", horizon("bientot"), true, true)
+        rubrique("plus_tard", "Plus tard", horizon("plus_tard"), false, false)
+        rubrique("un_jour", "Un jour", horizon("un_jour"), false, false)
         return res
     }
 
@@ -351,7 +354,7 @@ class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteView
 }
 
 /**
- * Point d'entrée des lignes du widget (activité invisible) : déplier/replier un sujet de notes sur place,
+ * Point d'entrée des lignes du widget (activité invisible) : déplier/replier une rubrique ou un sujet de notes sur place,
  * confirmer « terminer », ou ouvrir la fiche.
  */
 class RouteurActivity : android.app.Activity() {
