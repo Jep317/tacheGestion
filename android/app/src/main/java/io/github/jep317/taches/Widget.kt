@@ -151,11 +151,23 @@ class WidgetTaches : AppWidgetProvider() {
 
             val cat = filtreCategorie(ctx, id)
             val proj = filtreProjet(ctx, id)
-            val morceaux = listOfNotNull(cat?.let { if (it.isEmpty()) "Sans catégorie" else it }, proj)
-            v.setTextViewText(R.id.filtre, if (morceaux.isEmpty()) "Filtrer : tout ▾" else "Filtre : " + morceaux.joinToString(" · ") + " ▾")
+            // Deux pastilles comme sur PC : remplies quand un filtre est actif, ✕ pour tout revoir.
+            fun pastille(vue: Int, actif: Boolean, texte: String) {
+                v.setTextViewText(vue, "$texte ▾")
+                v.setInt(vue, "setBackgroundResource", if (actif) R.drawable.fond_filtre_actif else R.drawable.fond_filtre)
+                v.setTextColor(vue, ctx.getColor(if (actif) R.color.accent_texte else R.color.texte))
+            }
+            pastille(R.id.filtre_cat, cat != null, when (cat) { null -> "Catégorie"; "" -> "Sans catégorie"; else -> cat })
+            pastille(R.id.filtre_sujet, proj != null, when (proj) { null -> "Sujet"; "" -> "Sans sujet"; else -> proj })
+            v.setViewVisibility(R.id.filtre_effacer, if (cat != null || proj != null) View.VISIBLE else View.GONE)
             val filtre = Intent(ctx, FiltreActivity::class.java).putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
             filtre.data = Uri.parse("taches://filtre/$id")
-            v.setOnClickPendingIntent(R.id.filtre, activite(ctx, 0, filtre))
+            v.setOnClickPendingIntent(R.id.filtre_cat, activite(ctx, 0, filtre))
+            v.setOnClickPendingIntent(R.id.filtre_sujet, activite(ctx, 0, filtre))
+            val effacer = Intent(ctx, FiltreActivity::class.java).putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+                .putExtra(FiltreActivity.EFFACER, true)
+            effacer.data = Uri.parse("taches://filtre/$id/effacer")
+            v.setOnClickPendingIntent(R.id.filtre_effacer, activite(ctx, 7, effacer))
             v.setOnClickPendingIntent(R.id.vide, activite(ctx, 2, Intent(ctx, MainActivity::class.java)))
             v.setOnClickPendingIntent(R.id.btn_ajouter, activite(ctx, 3, Intent(ctx, AjoutActivity::class.java)))
             v.setOnClickPendingIntent(
@@ -230,11 +242,11 @@ class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteView
         val proj = WidgetTaches.filtreProjet(ctx, widgetId)
         val filtres = items.filter { i ->
             (cat == null || (if (cat.isEmpty()) i.categorie == null && i.etat != "a_trier" else i.categorie == cat)) &&
-                (proj == null || i.projet == proj)
+                (proj == null || (if (proj.isEmpty()) i.projet.isNullOrBlank() else i.projet == proj))
         }
         lignes = if (WidgetTaches.onglet(ctx, widgetId) == WidgetTaches.NOTES) construireNotes(filtres) else construire(filtres)
         if (lignes.isEmpty() || (cat != null || proj != null) && filtres.isEmpty()) {
-            lignes = listOf(Ligne.Info("Rien avec ce filtre. Touche « Filtre » en haut pour tout voir."))
+            lignes = listOf(Ligne.Info("Rien avec ce filtre. Touche ✕ en haut pour tout voir."))
         }
     }
 
@@ -311,6 +323,8 @@ class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteView
             is Ligne.Entete -> RemoteViews(ctx.packageName, R.layout.ligne_entete).apply {
                 setTextViewText(R.id.nom, if (l.cle == null) l.nom else (if (l.ouvert) "▾ " else "▸ ") + l.nom)
                 setTextViewText(R.id.compte, l.compte.toString())
+                // Repliable : la ligne prend un fond de bouton pour se toucher facilement.
+                setInt(R.id.entete, "setBackgroundResource", if (l.cle != null) R.drawable.fond_ligne else 0)
                 if (l.cle != null) {
                     setOnClickFillInIntent(
                         R.id.entete,

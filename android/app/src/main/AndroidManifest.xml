@@ -72,7 +72,7 @@
             android:excludeFromRecents="true"
             android:exported="false"
             android:taskAffinity=".filtre"
-            android:theme="@style/Theme.Taches.Transparent" />
+            android:theme="@style/Theme.Taches.Fiche" />
 
         <activity
             android:name=".DetailActivity"
