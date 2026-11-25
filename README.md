@@ -60,7 +60,7 @@ Petite appli Android native (Kotlin, sans bibliothèque) qui pose un **widget** 
 
 Construite par l'action GitHub « Appli Android » à chaque changement de `android/` sur main ; l'APK remplace celui de la
 version `android` (marquée « préversion » pour ne pas gêner les mises à jour du panneau Windows), adresse fixe ci-dessus.
-Installer le nouvel APK par-dessus l'ancien suffit : la clé de signature (`android/signature/`) est toujours la même.
+Installer le nouvel APK par-dessus l'ancien suffit : la clé de signature est toujours la même. Elle n'est pas dans le dépôt : l'action la reçoit du secret GitHub `ANDROID_SIGNATURE` (ligne 1 = mot de passe, ligne 2 = fichier PKCS12 en base64).
 Elle est dans le dépôt public, ce qui est acceptable pour une appli personnelle installée à la main, pas pour le Play Store.
 
 ## Connexion et sécurité
