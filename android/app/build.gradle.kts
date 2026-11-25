@@ -16,24 +16,28 @@ android {
         versionName = "1.0.0"
     }
 
-    // Clé de signature fixe, rangée dans le dépôt : chaque nouvelle version s'installe par-dessus l'ancienne
-    // sans perdre la connexion ni le widget. Appli personnelle installée hors Play Store.
-    signingConfigs {
-        create("taches") {
-            storeFile = file("../signature/taches.jks")
-            storePassword = "taches-android"
-            keyAlias = "taches"
-            keyPassword = "taches-android"
+    // Clé de signature secrète : l'action GitHub la reçoit du secret ANDROID_SIGNATURE et l'écrit
+    // dans signature/taches.p12 (jamais dans le dépôt). Le mot de passe arrive par ANDROID_SIGNATURE_MDP.
+    // Sans ces deux éléments (construction d'essai), l'APK est signé avec la clé de débogage et n'est pas publié.
+    val cle = file("../signature/taches.p12")
+    val mdp = System.getenv("ANDROID_SIGNATURE_MDP")
+    val signee = cle.exists() && !mdp.isNullOrEmpty()
+    if (signee) {
+        signingConfigs {
+            create("taches") {
+                storeFile = cle
+                storeType = "PKCS12"
+                storePassword = mdp
+                keyAlias = "taches"
+                keyPassword = mdp
+            }
         }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("taches")
-        }
-        debug {
-            signingConfig = signingConfigs.getByName("taches")
+            signingConfig = signingConfigs.getByName(if (signee) "taches" else "debug")
         }
     }
 

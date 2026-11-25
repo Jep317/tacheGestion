@@ -32,15 +32,29 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
+      - name: Préparer la clé de signature
+        # Le secret ANDROID_SIGNATURE contient : ligne 1 = mot de passe, ligne 2 = clé en base64.
+        env:
+          SIGNATURE: ${{ secrets.ANDROID_SIGNATURE }}
+        run: |
+          if [ -z "$SIGNATURE" ]; then echo "Pas de clé : construction d'essai seulement."; exit 0; fi
+          mkdir -p signature
+          printf '%s\n' "$SIGNATURE" | sed -n 2p | base64 -d > signature/taches.p12
+          echo "::add-mask::$(printf '%s\n' "$SIGNATURE" | sed -n 1p)"
+          echo "ANDROID_SIGNATURE_MDP=$(printf '%s\n' "$SIGNATURE" | sed -n 1p)" >> "$GITHUB_ENV"
       - name: Construire
         run: gradle assembleRelease --no-daemon --stacktrace
         env:
           VERSION_CODE: ${{ github.run_number }}
+      - name: Effacer la clé
+        if: always()
+        run: rm -f signature/taches.p12
       - name: Renommer
         run: cp app/build/outputs/apk/release/app-release.apk Taches-Android.apk && ls -l Taches-Android.apk
       - name: Publier
         if: github.event_name != 'pull_request'
         run: |
+          if [ -z "$ANDROID_SIGNATURE_MDP" ]; then echo "Secret ANDROID_SIGNATURE absent : APK non publié."; exit 1; fi
           if gh release view android >/dev/null 2>&1; then
             gh release upload android Taches-Android.apk --clobber
           else
