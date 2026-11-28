@@ -1191,6 +1191,7 @@ function ecrireNote(item, { fenetre = false } = {}) {
   if (!fenetre) document.title = 'Tâches · écriture'; // le panneau ne se cache pas sur Échap pendant l'écriture
   return ouvrirEcrivain({
     libelleFin: fenetre ? 'Fermer' : 'Terminé',
+    enGrand: !fenetre && EN_GRAND_POSSIBLE ? () => ouvrirEnGrand(item) : null,
     fermer: () => { if (fenetre) window.close(); else document.title = titreAvant; },
     titre: libelle(item),
     details: item.details || '',

@@ -120,7 +120,7 @@ let ouvert = null;
  * Ouvre l'éditeur plein écran pour une note.
  * enregistrer({ titre, details }) est appelé pendant l'écriture (après une pause) et à la fermeture.
  */
-export function ouvrirEcrivain({ titre, details, enregistrer, fermer: quandFerme, libelleFin = 'Terminé' }) {
+export function ouvrirEcrivain({ titre, details, enregistrer, fermer: quandFerme, libelleFin = 'Terminé', enGrand = null }) {
   if (ouvert) ouvert.fermer();
   document.execCommand('defaultParagraphSeparator', false, 'p');
   const voile = document.createElement('div');
@@ -138,7 +138,10 @@ export function ouvrirEcrivain({ titre, details, enregistrer, fermer: quandFerme
         <button type="button" data-f="gras" title="Gras (Ctrl+B)"><b>G</b></button>
         <button type="button" data-f="italique" title="Italique (Ctrl+I)"><i>I</i></button>
       </div>
-      <button type="button" class="ecrivain-fin">${libelleFin}</button>
+      <div class="ecrivain-actions">
+        ${enGrand ? '<button type="button" class="ecrivain-grand" title="Ouvrir la note dans une grande fenêtre">⤢ En grand</button>' : ''}
+        <button type="button" class="ecrivain-fin">${libelleFin}</button>
+      </div>
     </div>
     <div class="ecrivain-page">
       <textarea class="ecrivain-titre" rows="1" maxlength="200" placeholder="Titre"></textarea>
@@ -382,6 +385,8 @@ export function ouvrirEcrivain({ titre, details, enregistrer, fermer: quandFerme
   const echappe = (e) => { if (e.target.closest?.('.champ-lien')) return; if (e.key === 'Escape' || (e.key === 'Enter' && (e.ctrlKey || e.metaKey))) { e.preventDefault(); e.stopPropagation(); fermer(); } };
   document.addEventListener('keydown', echappe, true);
   voile.querySelector('.ecrivain-fin').addEventListener('click', fermer);
+  // « En grand » : on enregistre et on referme ici, puis la note s'ouvre dans sa propre fenêtre.
+  voile.querySelector('.ecrivain-grand')?.addEventListener('click', async () => { await fermer(); enGrand(); });
   window.addEventListener('beforeunload', () => { if (ouvert) sauver(); });
 
   ouvert = { fermer, sauver };
