@@ -2,6 +2,7 @@
 // l'appli ne fait qu'ajouter des éléments « à trier » et cocher ce qui est fait.
 import { createClient } from './vendor/supabase-js-2.45.4.js';
 import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
+import { rendreMarkdown, texteSimple, tempsDeLecture, ouvrirEcrivain } from './editeur.js?v=1';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 const $ = (s) => document.querySelector(s);
@@ -559,7 +560,7 @@ function fiche(i, { niveau, cocher, cleOuvert, parent, notes, brut }) {
   const parties = [];
   const note = TYPES_NOTES.includes(i.type);
   if (!etat.edition.has(cleOuvert) || i.etat === 'a_trier') {
-    if (i.details) parties.push(`<div class="description">${echap(i.details)}</div>`);
+    if (i.details) parties.push(note ? `<div class="description article">${rendreMarkdown(i.details)}</div>` : `<div class="description">${echap(i.details)}</div>`);
     else if (note && i.etat !== 'a_trier') parties.push(`<button type="button" class="description vide-note" data-editer="${echap(cleOuvert)}">✏️ Écrire le texte de la note</button>`);
   } else parties.push(`<textarea class="description description-edit${note ? ' note' : ''}" rows="${note ? 3 : 1}" data-edition="details" data-id="${i.id}" data-cle="${echap(cleOuvert)}"
     aria-label="${note ? 'Texte de la note' : 'Description'}" placeholder="${note ? 'Écris le texte de ta note…' : 'Ajouter une description…'}">${echap(i.details || '')}</textarea>`);
@@ -578,7 +579,7 @@ function fiche(i, { niveau, cocher, cleOuvert, parent, notes, brut }) {
   if (tache && (notes.length || ajout === 'note')) {
     parties.push(`<div class="bloc">
       <div class="bloc-titre">Notes attachées${notes.length ? ` <span class="compte">${notes.length}</span>` : ''}</div>
-      ${notes.map((n) => `<div class="note-liee"><strong>${echap(libelle(n))}</strong>${n.details && n.details !== n.titre ? `<div>${echap(n.details)}</div>` : ''}</div>`).join('')}
+      ${notes.map((n) => `<div class="note-liee"><strong>${echap(libelle(n))}</strong>${n.details && n.details !== n.titre ? `<div class="article">${rendreMarkdown(n.details)}</div>` : ''}</div>`).join('')}
       ${ajout === 'note' ? `<form class="mini-ajout" data-ajout-note="${i.id}">
         <textarea rows="1" data-garder="note-${i.id}" placeholder="Écris la note puis Entrée"></textarea>
         <button type="submit" class="mini" aria-label="Attacher la note">＋</button>${annuler}</form>` : ''}
@@ -907,6 +908,7 @@ function carte(i, { cocher = true, niveau = 0, contexte = false, raison = '', ar
   if (niveau === 0 && etat.filtre === 'tout' && cat) tags.push(`<span class="tag cat c${couleur(cat.id)}">${echap(cat.nom)}</span>`);
   if (i.type === 'course') tags.push('<span class="tag">Course</span>');
   if (i.type === 'idee') tags.push('<span class="tag">Idée</span>');
+  if (TYPES_NOTES.includes(i.type) && i.details) tags.push(`<span class="lecture">${tempsDeLecture(i.details)} min de lecture</span>`);
   if (i.etat === 'en_cours') tags.push('<span class="tag">En cours</span>');
   if (i.echeance) tags.push(tagEcheance(i));
   if (i.recurrence) tags.push(`<span class="tag" title="${echap(texteRecurrence(i.recurrence))}">🔁 ${echap(texteRecurrence(i.recurrence, true))}</span>`);
@@ -925,6 +927,7 @@ function carte(i, { cocher = true, niveau = 0, contexte = false, raison = '', ar
       ${editable ? `<textarea class="titre titre-edit" rows="1" data-edition="titre" data-id="${i.id}" data-cle="${echap(cleOuvert)}" maxlength="200"
         aria-label="Titre" placeholder="Titre" enterkeyhint="done">${echap(libelle(i))}</textarea>` : `<div class="titre">${echap(libelle(i))}</div>`}
       ${raison ? `<div class="raison">${echap(raison)}</div>` : ''}
+      ${!ouvert && TYPES_NOTES.includes(i.type) && i.details ? `<div class="extrait">${echap(texteSimple(i.details).slice(0, 220))}</div>` : ''}
       ${ouvert ? (prog.total ? `<div class="meta">${tags[tags.findIndex((t) => t.includes('data-action="arbre"'))] || ''}</div>` : '')
         : tags.length ? `<div class="meta">${tags.join('')}</div>` : ''}
     </div>
@@ -1152,6 +1155,23 @@ function restaurerSaisies({ valeurs, actif, edition }) {
   }
 }
 
+// ---------- notes : éditeur plein écran (editeur.js) ----------
+function ecrireNote(item) {
+  ouvrirEcrivain({
+    titre: libelle(item),
+    details: item.details || '',
+    enregistrer: async (v, avant) => {
+      const champs = {};
+      if (v.titre && v.titre !== avant.titre) champs.titre = v.titre;
+      if (v.details !== avant.details) champs.details = v.details || null;
+      if (!Object.keys(champs).length) return true;
+      const ancien = { id: item.id, titre: item.titre ?? null, details: item.details ?? null };
+      Object.assign(item, champs); // tout de suite, pour qu'un rechargement ne remette pas l'ancien texte
+      return majItem(ancien, champs);
+    },
+  });
+}
+
 // ---------- titre et texte modifiables dans la fiche ----------
 function ajusterHauteurDe(c) { c.style.height = 'auto'; c.style.height = c.scrollHeight + 'px'; }
 function ajusterEditions() { document.querySelectorAll('[data-edition]').forEach(ajusterHauteurDe); }
@@ -1182,6 +1202,8 @@ document.addEventListener('click', (e) => {
   if (ed) {
     e.stopPropagation();
     const cle = ed.dataset.editer;
+    const aEcrire = trouver(ed.closest('.item')?.dataset.id);
+    if (aEcrire && TYPES_NOTES.includes(aEcrire.type)) { ecrireNote(aEcrire); return; }
     etat.edition.add(cle);
     afficher();
     const champ = document.querySelector(`[data-edition="details"][data-cle="${CSS.escape(cle)}"]`);
