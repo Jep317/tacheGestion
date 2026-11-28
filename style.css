@@ -794,6 +794,14 @@ body.ecrivain-ouvert { overflow: hidden; }
 .ecrivain-haut .outils:hover, .ecrivain-haut .outils:focus-within { opacity: 1; }
 .ecrivain-haut .outils button { background: none; border: 0; border-radius: 6px; padding: 5px 8px; font-size: 12.5px; color: var(--discret); white-space: nowrap; }
 .ecrivain-haut .outils button:hover { color: var(--texte); background: var(--survol, rgba(0,0,0,.05)); }
+.ecrivain-actions { flex: none; display: flex; align-items: center; gap: 2px; margin-left: auto; }
+@media (max-width: 640px) {
+  /* Panneau étroit : « En grand » et « Terminé » en haut, les outils de mise en forme en dessous, sur toute la largeur. */
+  .ecrivain-haut { flex-wrap: wrap; row-gap: 4px; }
+  .ecrivain-haut .outils { order: 2; flex-basis: 100%; }
+}
+.ecrivain-grand { background: none; border: 0; color: var(--discret); font-size: 13.5px; padding: 6px 8px; border-radius: 6px; white-space: nowrap; }
+.ecrivain-grand:hover { color: var(--texte); }
 .ecrivain-fin { flex: none; }
 body.panneau .ecrivain-haut { padding-right: 44px; }
 body.panneau3 .ecrivain-haut { padding-right: 110px; }
