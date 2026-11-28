@@ -187,6 +187,7 @@ async function charger() {
   if (!$('#dlg-revue').hidden) afficherRevue();
   if (revueDemandee) { revueDemandee = false; if (etat.propositions.length) ouvrirRevue(); }
   if (itemDemande) montrerItem(itemDemande);
+  ouvrirFenetreEcriture();
 }
 
 async function ajouter(texte, source) {
@@ -608,6 +609,7 @@ function fiche(i, { niveau, cocher, cleOuvert, parent, notes, brut }) {
         ${choix.map(([k, ic, t]) => `<button type="button" role="menuitem" data-ajout-ouvrir="${k}" data-cle="${echap(cleOuvert)}"><span class="icone" aria-hidden="true">${ic}</span>${t}</button>`).join('')}
       </div>
     </div>` : ''}
+    ${TYPES_NOTES.includes(i.type) && i.etat !== 'a_trier' && EN_GRAND_POSSIBLE ? `<button type="button" class="puce-action" data-en-grand="${i.id}" title="Ouvrir la note dans une grande fenêtre">⤢ Ouvrir en grand</button>` : ''}
     <button type="button" class="puce-action btn-reglages" data-reglages="${echap(cleOuvert)}" aria-expanded="${reglagesOuverts}">⚙ Réglages</button>
   </div>`);
 
@@ -1156,8 +1158,40 @@ function restaurerSaisies({ valeurs, actif, edition }) {
 }
 
 // ---------- notes : éditeur plein écran (editeur.js) ----------
-function ecrireNote(item) {
-  ouvrirEcrivain({
+// Ouvrir une note « en grand » : dans le panneau Windows (version 1.1.5 et plus), une vraie fenêtre Windows
+// redimensionnable ; dans un navigateur, une fenêtre à part. Les anciens panneaux n'ont pas ce bouton.
+const ECRIRE = new URLSearchParams(location.search).get('ecrire'); // cette page est la fenêtre d'écriture d'une note
+const PANNEAU = (navigator.userAgent.match(/TachesPanneau\/(\d+)/) || [])[1];
+const EN_GRAND_POSSIBLE = !ECRIRE && (!PANNEAU || Number(PANNEAU) >= 4);
+function ouvrirEnGrand(item) {
+  if (PANNEAU) window.open('taches://ecrire/' + encodeURIComponent(item.id));
+  else window.open(location.pathname + '?ecrire=' + encodeURIComponent(item.id), 'note-' + item.id, 'popup,width=900,height=780');
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-en-grand]');
+  if (!b) return;
+  e.stopPropagation();
+  const item = trouver(b.dataset.enGrand);
+  if (item) ouvrirEnGrand(item);
+}, true);
+
+let fenetreEcriture = null; // en mode ?ecrire= : l'éditeur ouvert dans toute la fenêtre
+function ouvrirFenetreEcriture() {
+  if (!ECRIRE || fenetreEcriture) return;
+  const item = trouver(ECRIRE);
+  if (!item) { document.body.innerHTML = '<p class="vide" style="padding:24px">Cette note n\'existe plus.</p>'; return; }
+  document.title = libelle(item) || 'Note';
+  fenetreEcriture = ecrireNote(item, { fenetre: true });
+  // Le panneau Windows demande d'enregistrer avant de fermer la fenêtre.
+  window.__avantFermeture = () => fenetreEcriture.sauver().then(() => true);
+}
+
+function ecrireNote(item, { fenetre = false } = {}) {
+  const titreAvant = document.title;
+  if (!fenetre) document.title = 'Tâches · écriture'; // le panneau ne se cache pas sur Échap pendant l'écriture
+  return ouvrirEcrivain({
+    libelleFin: fenetre ? 'Fermer' : 'Terminé',
+    fermer: () => { if (fenetre) window.close(); else document.title = titreAvant; },
     titre: libelle(item),
     details: item.details || '',
     enregistrer: async (v, avant) => {
@@ -1167,6 +1201,7 @@ function ecrireNote(item) {
       if (!Object.keys(champs).length) return true;
       const ancien = { id: item.id, titre: item.titre ?? null, details: item.details ?? null };
       Object.assign(item, champs); // tout de suite, pour qu'un rechargement ne remette pas l'ancien texte
+      if (fenetre && champs.titre) document.title = champs.titre;
       return majItem(ancien, champs);
     },
   });
@@ -1831,7 +1866,7 @@ if ('serviceWorker' in navigator) {
   const avaitUnControleur = !!navigator.serviceWorker.controller;
   let recharge = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!avaitUnControleur || recharge) return;
+    if (!avaitUnControleur || recharge || document.body.classList.contains('ecrivain-ouvert')) return; // jamais pendant l'écriture
     recharge = true;
     location.reload();
   });
@@ -1850,7 +1885,7 @@ setInterval(() => { if (aujourdhui() !== jourAffiche) { jourAffiche = aujourdhui
 
 // Panneau Windows (appli « MesTaches », version 1.1.2 et suivantes) : un bouton pour masquer le panneau.
 // Le panneau intercepte l'ouverture de « taches://masquer » ; Ctrl+Alt+T le rappelle.
-if (/TachesPanneau\//.test(navigator.userAgent)) {
+if (/TachesPanneau\//.test(navigator.userAgent) && !new URLSearchParams(location.search).has('ecrire')) {
   const masquer = document.createElement('button');
   masquer.className = 'btn-masquer';
   masquer.type = 'button';

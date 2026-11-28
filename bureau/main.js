@@ -33,7 +33,8 @@ app.userAgentFallback = app.userAgentFallback
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/[^\x20-\x7e]/g, '') +
   // Marqueur lu par le site : il n'affiche le bouton « masquer » que dans un panneau qui sait le traiter.
-  ' TachesPanneau/3'; // 2 : sait aussi verrouiller la position ; 3 : sait se réduire en petite barre
+  ' TachesPanneau/4'; // 2 : sait aussi verrouiller la position ; 3 : sait se réduire en petite barre ;
+                      // 4 : sait ouvrir une note en grand dans sa propre fenêtre (taches://ecrire/<id>)
 const premiereInstance = app.requestSingleInstanceLock();
 if (!premiereInstance) app.quit();
 
@@ -64,6 +65,61 @@ function cadreValide(c) {
   // Le cadre enregistré doit encore tomber sur un écran branché.
   return screen.getAllDisplays().some(({ workArea: z }) =>
     c.x < z.x + z.width - 50 && c.x + c.width > z.x + 50 && c.y >= z.y - 10 && c.y < z.y + z.height - 50);
+}
+
+// ---------- note ouverte en grand ----------
+// Une vraie fenêtre Windows (déplaçable, redimensionnable, plein écran) avec l'éditeur de la note.
+// Une seule fenêtre par note ; la taille et la place sont retenues pour la suivante.
+const fenetresNotes = new Map();
+function ouvrirNote(id) {
+  if (!/^[0-9a-f-]{8,64}$/i.test(id)) return;
+  const deja = fenetresNotes.get(id);
+  if (deja && !deja.isDestroyed()) { if (deja.isMinimized()) deja.restore(); deja.show(); deja.focus(); return; }
+  const memo = reglages.editeur || {};
+  const cadre = memo.cadre && cadreValide(memo.cadre) ? memo.cadre : { width: 900, height: 780 };
+  const f = new BrowserWindow({
+    ...cadre,
+    minWidth: 420,
+    minHeight: 360,
+    show: false,
+    title: 'Note',
+    icon: path.join(__dirname, 'icone.png'),
+    backgroundColor: '#ffffff',
+    autoHideMenuBar: true,
+    webPreferences: { contextIsolation: true, sandbox: true, spellcheck: true },
+  });
+  fenetresNotes.set(id, f);
+  f.setMenuBarVisibility(false);
+  f.loadURL(ADRESSE + '?ecrire=' + encodeURIComponent(id));
+  f.once('ready-to-show', () => { if (memo.maximisee) f.maximize(); f.show(); });
+  f.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  f.webContents.on('will-navigate', (e, url) => {
+    if (!url.startsWith(ADRESSE)) { e.preventDefault(); shell.openExternal(url); }
+  });
+  const retenir = () => {
+    if (f.isDestroyed() || f.isMinimized()) return;
+    enregistrer({ editeur: { cadre: f.isMaximized() ? (reglages.editeur || {}).cadre : f.getBounds(), maximisee: f.isMaximized() } });
+  };
+  f.on('resized', retenir);
+  f.on('moved', retenir);
+  f.on('maximize', retenir);
+  f.on('unmaximize', retenir);
+  // Avant de fermer : la page enregistre ce qui vient d'être tapé (au plus 3 secondes d'attente).
+  let peutFermer = false;
+  f.on('close', (e) => {
+    if (peutFermer) return;
+    e.preventDefault();
+    retenir();
+    const fin = () => { peutFermer = true; if (!f.isDestroyed()) f.close(); };
+    Promise.race([
+      f.webContents.executeJavaScript('window.__avantFermeture ? window.__avantFermeture() : true'),
+      new Promise((r) => setTimeout(r, 3000)),
+    ]).catch(() => {}).finally(fin);
+  });
+  f.on('closed', () => fenetresNotes.delete(id));
 }
 
 // ---------- fenêtre ----------
@@ -103,6 +159,7 @@ function creerFenetre({ visible }) {
     else if (url === 'taches://verrou') verrouiller(!reglages.verrouille); // bouton cadenas du site
     else if (url === 'taches://reduire') reduire(true); // bouton « réduire » du site
     else if (url === 'taches://agrandir') reduire(false); // bouton de la petite barre
+    else if (url.startsWith('taches://ecrire/')) ouvrirNote(decodeURIComponent(url.slice('taches://ecrire/'.length))); // « Ouvrir en grand »
     else if (/^https?:/.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
@@ -111,7 +168,10 @@ function creerFenetre({ visible }) {
   });
 
   fenetre.webContents.on('before-input-event', (e, entree) => {
-    if (entree.type === 'keyDown' && entree.key === 'Escape') { e.preventDefault(); fenetre.hide(); }
+    // Échap cache le panneau, sauf pendant l'écriture d'une note (Échap ferme alors l'éditeur).
+    if (entree.type === 'keyDown' && entree.key === 'Escape' && !fenetre.webContents.getTitle().includes('écriture')) {
+      e.preventDefault(); fenetre.hide();
+    }
   });
 
   // En petite barre, on retient la place de la barre sans toucher au cadre du panneau ouvert.

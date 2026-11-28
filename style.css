@@ -789,7 +789,12 @@ body.ecrivain-ouvert { overflow: hidden; }
   display: flex;
   flex-direction: column;
 }
-.ecrivain-haut { display: flex; justify-content: flex-end; padding: 10px 16px 0; }
+.ecrivain-haut { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 16px 0; }
+.ecrivain-haut .outils { display: flex; flex-wrap: wrap; gap: 2px; min-width: 0; opacity: .55; transition: opacity .2s; }
+.ecrivain-haut .outils:hover, .ecrivain-haut .outils:focus-within { opacity: 1; }
+.ecrivain-haut .outils button { background: none; border: 0; border-radius: 6px; padding: 5px 8px; font-size: 12.5px; color: var(--discret); white-space: nowrap; }
+.ecrivain-haut .outils button:hover { color: var(--texte); background: var(--survol, rgba(0,0,0,.05)); }
+.ecrivain-fin { flex: none; }
 body.panneau .ecrivain-haut { padding-right: 44px; }
 body.panneau3 .ecrivain-haut { padding-right: 110px; }
 .ecrivain-fin { background: none; border: 0; color: var(--discret); font-size: 13.5px; padding: 6px 8px; border-radius: 6px; }
