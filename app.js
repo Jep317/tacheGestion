@@ -602,15 +602,14 @@ function fiche(i, { niveau, cocher, cleOuvert, parent, notes, brut }) {
     choix.push(['check', '☑', 'Ligne de checklist'], ['note', '📎', 'Note attachée']);
   }
   const reglagesOuverts = etat.reglages.has(cleOuvert);
-  parties.push(`<div class="barre-fiche">
-    ${choix.length ? `<div class="menu-ajout">
+  // Pied de fiche : seulement « ＋ » (tâches). Réglages, En grand et Modifier sont des icônes en haut à droite.
+  if (choix.length) parties.push(`<div class="barre-fiche">
+    <div class="menu-ajout">
       <button type="button" class="puce-action btn-plus" data-menu-ajout aria-haspopup="menu" aria-expanded="false" aria-label="Ajouter" title="Ajouter une sous-tâche, une ligne de checklist ou une note">＋</button>
       <div class="pop-ajout" role="menu" hidden>
         ${choix.map(([k, ic, t]) => `<button type="button" role="menuitem" data-ajout-ouvrir="${k}" data-cle="${echap(cleOuvert)}"><span class="icone" aria-hidden="true">${ic}</span>${t}</button>`).join('')}
       </div>
-    </div>` : ''}
-    ${TYPES_NOTES.includes(i.type) && i.etat !== 'a_trier' && EN_GRAND_POSSIBLE ? `<button type="button" class="puce-action" data-en-grand="${i.id}" title="Ouvrir la note dans une grande fenêtre">⤢ Ouvrir en grand</button>` : ''}
-    <button type="button" class="puce-action btn-reglages" data-reglages="${echap(cleOuvert)}" aria-expanded="${reglagesOuverts}">⚙ Réglages</button>
+    </div>
   </div>`);
 
   if (reglagesOuverts) {
@@ -655,7 +654,7 @@ document.addEventListener('click', (e) => {
     const cle = reg.dataset.reglages;
     etat.reglages.has(cle) ? etat.reglages.delete(cle) : etat.reglages.add(cle);
     afficher();
-    if (etat.reglages.has(cle)) document.querySelector(`[data-reglages="${CSS.escape(cle)}"]`)?.closest('.details')?.querySelector('.reglages')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (etat.reglages.has(cle)) document.querySelector(`[data-reglages="${CSS.escape(cle)}"]`)?.closest('.item')?.querySelector('.reglages')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     return;
   }
   const plus = e.target.closest('[data-menu-ajout]');
@@ -933,7 +932,11 @@ function carte(i, { cocher = true, niveau = 0, contexte = false, raison = '', ar
       ${ouvert ? (prog.total ? `<div class="meta">${tags[tags.findIndex((t) => t.includes('data-action="arbre"'))] || ''}</div>` : '')
         : tags.length ? `<div class="meta">${tags.join('')}</div>` : ''}
     </div>
-    ${modifiable && !editable ? `<button type="button" class="crayon" data-editer="${echap(cleOuvert)}" aria-label="Modifier le titre et le texte" title="Modifier">✏️</button>` : ''}
+    ${ouvert ? `<div class="icones-fiche">
+      ${TYPES_NOTES.includes(i.type) && i.etat !== 'a_trier' && EN_GRAND_POSSIBLE ? `<button type="button" class="icone-fiche" data-en-grand="${i.id}" aria-label="Ouvrir en grand" title="Ouvrir en grand">⤢</button>` : ''}
+      <button type="button" class="icone-fiche" data-reglages="${echap(cleOuvert)}" aria-expanded="${etat.reglages.has(cleOuvert)}" aria-label="Réglages" title="Réglages">⚙</button>
+      ${modifiable && !editable ? `<button type="button" class="icone-fiche crayon" data-editer="${echap(cleOuvert)}" aria-label="Modifier le titre et le texte" title="Modifier">✏️</button>` : ''}
+    </div>` : ''}
     ${detail}
   </li>`;
   // L'arbre : les sous-tâches sous leur parent, reliées par un trait.
@@ -1167,6 +1170,11 @@ function ouvrirEnGrand(item) {
   if (PANNEAU) window.open('taches://ecrire/' + encodeURIComponent(item.id));
   else window.open(location.pathname + '?ecrire=' + encodeURIComponent(item.id), 'note-' + item.id, 'popup,width=900,height=780');
 }
+const dernierClicNote = { id: null, t: 0 };
+// Pas de sélection de mot au double-clic sur un titre de note.
+document.addEventListener('mousedown', (e) => {
+  if (e.detail > 1 && EN_GRAND_POSSIBLE && e.target.closest('#vue-notes .item .corps') && !e.target.closest('textarea, input')) e.preventDefault();
+});
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-en-grand]');
   if (!b) return;
@@ -1555,6 +1563,19 @@ document.addEventListener('click', (e) => {
   const action = cible.dataset.action;
   if (action === 'ouvrir') {
     const cle = cible.dataset.ouvrir || item.id;
+    // Double-clic sur une note (repliée ou ouverte) : elle s'ouvre directement en grand.
+    // (Le premier clic a redessiné la liste, donc le navigateur ne voit pas de « dblclick » : on le détecte ici.)
+    const maintenant = Date.now();
+    if (EN_GRAND_POSSIBLE && TYPES_NOTES.includes(item.type) && item.etat !== 'a_trier'
+      && dernierClicNote.id === cle && maintenant - dernierClicNote.t < 450) {
+      dernierClicNote.id = null;
+      etat.ouverts.has(cle) ? etat.ouverts.delete(cle) : etat.ouverts.add(cle); // on annule le premier clic
+      afficher();
+      getSelection()?.removeAllRanges();
+      ouvrirEnGrand(item);
+      return;
+    }
+    dernierClicNote.id = cle; dernierClicNote.t = maintenant;
     etat.edition.delete(cle);
     etat.ouverts.has(cle) ? etat.ouverts.delete(cle) : etat.ouverts.add(cle);
     afficher();
