@@ -120,7 +120,7 @@ let ouvert = null;
  * Ouvre l'éditeur plein écran pour une note.
  * enregistrer({ titre, details }) est appelé pendant l'écriture (après une pause) et à la fermeture.
  */
-export function ouvrirEcrivain({ titre, details, enregistrer, fermer: quandFerme }) {
+export function ouvrirEcrivain({ titre, details, enregistrer, fermer: quandFerme, libelleFin = 'Terminé' }) {
   if (ouvert) ouvert.fermer();
   document.execCommand('defaultParagraphSeparator', false, 'p');
   const voile = document.createElement('div');
@@ -128,7 +128,18 @@ export function ouvrirEcrivain({ titre, details, enregistrer, fermer: quandFerme
   voile.setAttribute('role', 'dialog');
   voile.setAttribute('aria-label', 'Écrire la note');
   voile.innerHTML = `
-    <div class="ecrivain-haut"><button type="button" class="ecrivain-fin">Terminé</button></div>
+    <div class="ecrivain-haut">
+      <div class="outils" role="toolbar" aria-label="Mise en forme">
+        <button type="button" data-f="h2" title="Titre (# puis espace)">Titre</button>
+        <button type="button" data-f="h3" title="Sous-titre (## puis espace)">Sous-titre</button>
+        <button type="button" data-f="liste" title="Liste à puces (- puis espace)">• Liste</button>
+        <button type="button" data-f="numeros" title="Liste numérotée (1. puis espace)">1. Liste</button>
+        <button type="button" data-f="citation" title="Citation (> puis espace)">“ Citation</button>
+        <button type="button" data-f="gras" title="Gras (Ctrl+B)"><b>G</b></button>
+        <button type="button" data-f="italique" title="Italique (Ctrl+I)"><i>I</i></button>
+      </div>
+      <button type="button" class="ecrivain-fin">${libelleFin}</button>
+    </div>
     <div class="ecrivain-page">
       <textarea class="ecrivain-titre" rows="1" maxlength="200" placeholder="Titre"></textarea>
       <div class="ecrivain-texte article" contenteditable="true" spellcheck="true" data-placeholder="Raconte ton histoire…"></div>
@@ -236,7 +247,14 @@ export function ouvrirEcrivain({ titre, details, enregistrer, fermer: quandFerme
   };
   const basculer = (tag) => {
     const b = blocCourant();
-    if (b) transformer(b, b.tagName.toLowerCase() === tag ? 'p' : tag);
+    if (!b) return;
+    const actuel = b.tagName.toLowerCase();
+    if ((tag === 'ul' || tag === 'ol') && (actuel === 'ul' || actuel === 'ol') && actuel !== tag) {
+      // Liste à puces <-> liste numérotée : on garde les lignes.
+      const l = document.createElement(tag); l.append(...b.childNodes); b.replaceWith(l); curseurDans(l.lastElementChild || l, true);
+      return;
+    }
+    transformer(b, actuel === tag ? 'p' : tag);
   };
   const format = (f) => {
     texte.focus();
@@ -247,6 +265,7 @@ export function ouvrirEcrivain({ titre, details, enregistrer, fermer: quandFerme
     else if (f === 'h3') basculer('h3');
     else if (f === 'citation') basculer('blockquote');
     else if (f === 'liste') basculer('ul');
+    else if (f === 'numeros') basculer('ol');
     compter(); plusTard(); marquerActif(); placerBarre();
   };
   // Lien : la barre devient un petit champ d'adresse (pas de fenêtre « prompt », absente du panneau Windows).
@@ -274,6 +293,19 @@ export function ouvrirEcrivain({ titre, details, enregistrer, fermer: quandFerme
   };
   barre.addEventListener('mousedown', (e) => { if (!e.target.closest('input')) e.preventDefault(); }); // garder la sélection
   barre.addEventListener('click', (e) => { const b = e.target.closest('[data-f]'); if (b) format(b.dataset.f); });
+  // Barre d'outils fixe en haut : mêmes actions, sans avoir à sélectionner du texte.
+  const outils = voile.querySelector('.outils');
+  let derniereSelection = null;
+  const garderSelection = () => { const s = getSelection(); if (s.rangeCount && texte.contains(s.anchorNode)) derniereSelection = s.getRangeAt(0).cloneRange(); };
+  outils.addEventListener('mousedown', (e) => e.preventDefault()); // garder le curseur dans le texte
+  outils.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-f]');
+    if (!b) return;
+    const s = getSelection();
+    if ((!s.rangeCount || !texte.contains(s.anchorNode)) && derniereSelection) { texte.focus(); s.removeAllRanges(); s.addRange(derniereSelection); }
+    if (!texte.contains(getSelection().anchorNode)) { texte.focus(); curseurDans(texte.lastElementChild || texte, true); }
+    format(b.dataset.f);
+  });
 
   // Raccourcis à la Medium : « # », « ## », « > », « - », « 1. » en début de paragraphe, puis espace.
   texte.addEventListener('keydown', (e) => {
@@ -323,7 +355,7 @@ export function ouvrirEcrivain({ titre, details, enregistrer, fermer: quandFerme
   });
   // Un clic sur un lien pendant l'écriture ne quitte pas la note.
   texte.addEventListener('click', (e) => { if (e.target.closest('a') && (e.ctrlKey || e.metaKey)) window.open(e.target.closest('a').href, '_blank', 'noopener'); });
-  const surSelection = () => { if (!ouvert) return; marquerActif(); placerBarre(); };
+  const surSelection = () => { if (!ouvert) return; garderSelection(); marquerActif(); placerBarre(); };
   document.addEventListener('selectionchange', surSelection);
   voile.querySelector('.ecrivain-page').addEventListener('scroll', () => placerBarre());
 
@@ -352,7 +384,7 @@ export function ouvrirEcrivain({ titre, details, enregistrer, fermer: quandFerme
   voile.querySelector('.ecrivain-fin').addEventListener('click', fermer);
   window.addEventListener('beforeunload', () => { if (ouvert) sauver(); });
 
-  ouvert = { fermer };
+  ouvert = { fermer, sauver };
   // Curseur à la fin du texte (ou dans le titre s'il est vide).
   if (!champTitre.value) champTitre.focus();
   else {
