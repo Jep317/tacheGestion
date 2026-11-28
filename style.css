@@ -704,7 +704,7 @@ body.glisse-en-cours, body.glisse-en-cours * { cursor: grabbing !important; -web
 .lien-suppr:hover { color: var(--alerte); text-decoration: underline; }
 /* Titre et texte modifiables directement dans la fiche ouverte */
 .item.ouvert { position: relative; }
-.item.ouvert .corps { padding-right: 26px; }
+.item.ouvert .corps { padding-right: 98px; }
 .titre-edit, .description-edit {
   display: block; width: 100%; resize: none; overflow: hidden; font: inherit; color: var(--texte);
   background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 2px 6px; margin: -3px -7px;
@@ -716,22 +716,15 @@ body.glisse-en-cours, body.glisse-en-cours * { cursor: grabbing !important; -web
 .titre-edit:hover, .description-edit:hover { border-color: var(--ligne); }
 .titre-edit:focus, .description-edit:focus { outline: none; border-color: var(--ligne); background: var(--survol); }
 .description-edit::placeholder, .titre-edit::placeholder { color: var(--discret); font-style: italic; }
-.crayon {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border-radius: 50%;
-  border: 0;
-  background: none;
-  font-size: 15px;
-  line-height: 1;
-  opacity: .4;
-  filter: grayscale(1);
+/* Fiche ouverte : petites icônes en haut à droite (En grand, Réglages, Modifier) */
+.icones-fiche { position: absolute; top: 6px; right: 0; display: flex; gap: 0; }
+.icone-fiche {
+  width: 32px; height: 32px; padding: 0; border-radius: 50%; border: 0; background: none;
+  font-size: 16px; line-height: 1; color: var(--discret); opacity: .55;
 }
-.crayon:hover, .crayon:focus-visible { opacity: 1; background: var(--ligne); }
+.icone-fiche.crayon { font-size: 15px; filter: grayscale(1); }
+.icone-fiche:hover, .icone-fiche:focus-visible { opacity: 1; background: var(--ligne); color: var(--texte); }
+.icone-fiche[aria-expanded="true"] { opacity: 1; color: var(--texte); }
 .vide-note {
   background: none;
   border: 1px dashed var(--ligne);
