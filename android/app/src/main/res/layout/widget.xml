@@ -5,7 +5,10 @@
     android:layout_height="match_parent"
     android:background="@drawable/fond_widget"
     android:orientation="vertical"
-    android:padding="10dp">
+    android:paddingStart="16dp"
+    android:paddingTop="10dp"
+    android:paddingEnd="12dp"
+    android:paddingBottom="10dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -30,8 +33,9 @@
                 android:paddingEnd="6dp"
                 android:paddingBottom="6dp"
                 android:text="Tâches"
+                android:fontFamily="serif"
                 android:textColor="@color/texte"
-                android:textSize="17sp"
+                android:textSize="19sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -43,8 +47,9 @@
                 android:paddingEnd="6dp"
                 android:paddingBottom="6dp"
                 android:text="Notes"
+                android:fontFamily="serif"
                 android:textColor="@color/discret"
-                android:textSize="17sp"
+                android:textSize="19sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
@@ -115,12 +120,12 @@
             android:maxLines="1"
             android:maxWidth="150dp"
             android:paddingStart="12dp"
-            android:paddingTop="8dp"
+            android:paddingTop="6dp"
             android:paddingEnd="10dp"
-            android:paddingBottom="8dp"
+            android:paddingBottom="6dp"
             android:text="Catégorie ▾"
             android:textColor="@color/texte"
-            android:textSize="14sp" />
+            android:textSize="13sp" />
 
         <TextView
             android:id="@+id/filtre_sujet"
@@ -132,12 +137,12 @@
             android:maxLines="1"
             android:maxWidth="150dp"
             android:paddingStart="12dp"
-            android:paddingTop="8dp"
+            android:paddingTop="6dp"
             android:paddingEnd="10dp"
-            android:paddingBottom="8dp"
+            android:paddingBottom="6dp"
             android:text="Sujet ▾"
             android:textColor="@color/texte"
-            android:textSize="14sp" />
+            android:textSize="13sp" />
 
         <TextView
             android:id="@+id/filtre_effacer"
@@ -168,7 +173,7 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:divider="@android:color/transparent"
-            android:dividerHeight="4dp"
+            android:dividerHeight="0dp"
             android:scrollbars="none" />
 
         <TextView

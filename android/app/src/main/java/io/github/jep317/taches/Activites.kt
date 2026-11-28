@@ -346,6 +346,7 @@ class DetailActivity : Activity() {
         }
         remplir(R.id.meta, intent.getStringExtra("meta"))
         remplir(R.id.details, intent.getStringExtra("details"))
+        if (intent.getStringExtra("type") in setOf("note", "idee")) styleArticle(intent.getStringExtra("details"))
         remplir(R.id.brut, intent.getStringExtra("brut")?.let { "« $it »" })
 
         // Contenu (sous-tâches, checklist, notes attachées), ✏ et ＋ : chargés depuis la base.
@@ -452,10 +453,26 @@ class DetailActivity : Activity() {
         }
     }
 
+    /** Une note se lit comme un article : titre et texte en serif, titres, citations, listes et liens mis en forme. */
+    private fun styleArticle(md: String?) {
+        val titre = findViewById<TextView>(R.id.titre)
+        titre.typeface = android.graphics.Typeface.create(android.graphics.Typeface.SERIF, android.graphics.Typeface.BOLD)
+        titre.textSize = 23f
+        val det = findViewById<TextView>(R.id.details)
+        det.typeface = android.graphics.Typeface.SERIF
+        det.textSize = 17f
+        det.setLineSpacing(0f, 1.3f)
+        if (!md.isNullOrBlank()) {
+            det.text = Article.mettreEnForme(md)
+            det.movementMethod = android.text.method.LinkMovementMethod.getInstance()
+        }
+    }
+
     private fun afficherContenu(id: String, f: Supabase.Fiche) {
         findViewById<TextView>(R.id.titre).text = f.titre
         val det = findViewById<TextView>(R.id.details)
         if (f.details.isNullOrBlank()) det.visibility = View.GONE else { det.visibility = View.VISIBLE; det.text = f.details }
+        if (intent.getStringExtra("type") in setOf("note", "idee")) styleArticle(f.details)
         val boite = findViewById<android.widget.LinearLayout>(R.id.contenu)
         boite.removeAllViews()
         fun rubrique(t: String) {
