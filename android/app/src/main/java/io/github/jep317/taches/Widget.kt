@@ -320,11 +320,13 @@ class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteView
     override fun getViewAt(position: Int): RemoteViews {
         val l = lignes.getOrNull(position) ?: return RemoteViews(ctx.packageName, R.layout.ligne_info)
         return when (l) {
-            is Ligne.Entete -> RemoteViews(ctx.packageName, if (l.groupe) R.layout.ligne_groupe else R.layout.ligne_entete).apply {
+            is Ligne.Entete -> RemoteViews(ctx.packageName, when {
+                l.groupe -> R.layout.ligne_groupe
+                l.cle?.startsWith("s:") == true || l.cle == null && l.nom == "Notes et idées" -> R.layout.ligne_sujet // sujet de notes : titre en serif
+                else -> R.layout.ligne_entete
+            }).apply {
                 setTextViewText(R.id.nom, if (l.cle == null) l.nom else (if (l.ouvert) "▾ " else "▸ ") + l.nom)
                 setTextViewText(R.id.compte, l.compte.toString())
-                // Repliable : la ligne prend un fond de bouton pour se toucher facilement.
-                if (!l.groupe) setInt(R.id.entete, "setBackgroundResource", if (l.cle != null) R.drawable.fond_ligne else 0)
                 if (l.cle != null) {
                     setOnClickFillInIntent(
                         R.id.entete,
@@ -342,7 +344,7 @@ class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteView
                 setViewVisibility(R.id.meta, View.VISIBLE)
                 setOnClickFillInIntent(R.id.ligne, Intent().putExtra("courses", true))
             }
-            is Ligne.Tache -> RemoteViews(ctx.packageName, R.layout.ligne_tache).apply {
+            is Ligne.Tache -> if (l.item.type == "note" || l.item.type == "idee") vueNote(l.item) else RemoteViews(ctx.packageName, R.layout.ligne_tache).apply {
                 val i = l.item
                 if (i.titre == null) {
                     val s = SpannableString(i.libelle)
@@ -355,15 +357,26 @@ class Fabrique(private val ctx: Context, private val widgetId: Int) : RemoteView
                 setTextViewText(R.id.meta, meta)
                 setViewVisibility(R.id.meta, if (meta.isEmpty()) View.GONE else View.VISIBLE)
                 setOnClickFillInIntent(R.id.ligne, Details.intention(i))
-                if (i.type == "note" || i.type == "idee") {
-                    setTextViewText(R.id.rond, "•")
-                } else {
-                    setTextViewText(R.id.rond, "○")
-                    // Toucher le rond : terminer, après confirmation.
-                    setOnClickFillInIntent(R.id.rond, Details.intention(i).putExtra("action", "terminer"))
-                }
+                setTextViewText(R.id.rond, "○")
+                // Toucher le rond : terminer, après confirmation.
+                setOnClickFillInIntent(R.id.rond, Details.intention(i).putExtra("action", "terminer"))
             }
         }
+    }
+
+    /** Une note comme un article : titre en serif, deux lignes d'aperçu, catégorie et temps de lecture. */
+    private fun vueNote(i: Supabase.Item) = RemoteViews(ctx.packageName, R.layout.ligne_note).apply {
+        setTextViewText(R.id.titre, i.libelle)
+        val apercu = Article.texteSimple(i.details).takeIf { it.isNotEmpty() && it != i.libelle }
+        setTextViewText(R.id.extrait, apercu ?: "")
+        setViewVisibility(R.id.extrait, if (apercu == null) View.GONE else View.VISIBLE)
+        val m = mutableListOf<String>()
+        i.categorie?.let { m += it }
+        if (i.type == "idee") m += "Idée"
+        if (apercu != null) m += "${Article.tempsDeLecture(i.details)} min de lecture"
+        setTextViewText(R.id.meta, m.joinToString(" · "))
+        setViewVisibility(R.id.meta, if (m.isEmpty()) View.GONE else View.VISIBLE)
+        setOnClickFillInIntent(R.id.ligne, Details.intention(i))
     }
 }
 

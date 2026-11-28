@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="fond">#F4EFE6</color>
-    <color name="carte">#FFFDF8</color>
-    <color name="texte">#23302B</color>
-    <color name="discret">#6B7671</color>
-    <color name="ligne">#E2DBCF</color>
-    <color name="accent">#2F6F5E</color>
+    <color name="fond">#FFFFFF</color>
+    <color name="carte">#FFFFFF</color>
+    <color name="texte">#242424</color>
+    <color name="discret">#6B6B6B</color>
+    <color name="ligne">#ECECEC</color>
+    <color name="accent">#191919</color>
     <color name="accent_texte">#FFFFFF</color>
+    <color name="pale">#A8A8A8</color>
     <!-- Couleurs des catégories, dans leur ordre (comme l'appli PC). -->
     <color name="c0">#3D6FA8</color>
     <color name="c1">#B5651D</color>

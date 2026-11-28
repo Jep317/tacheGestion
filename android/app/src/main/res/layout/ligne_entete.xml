@@ -1,19 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- En-tête d'une rubrique ou d'un sujet. Repliable : toute la ligne (haute, facile à toucher) bascule. -->
+<!-- En-tête d'une rubrique de tâches (Aujourd'hui, Maintenant…) : petites capitales espacées, comme sur PC.
+     Repliable : toute la ligne (haute, facile à toucher) bascule. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:paddingTop="6dp">
+    android:paddingTop="10dp">
 
     <LinearLayout
         android:id="@+id/entete"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
-        android:minHeight="46dp"
+        android:minHeight="40dp"
         android:orientation="horizontal"
-        android:paddingStart="10dp"
-        android:paddingEnd="10dp">
+        android:paddingStart="2dp"
+        android:paddingEnd="4dp">
 
         <TextView
             android:id="@+id/nom"
@@ -21,17 +22,18 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:ellipsize="end"
+            android:letterSpacing="0.12"
             android:maxLines="1"
-            android:textColor="@color/accent"
-            android:textSize="15sp"
-            android:textStyle="bold" />
+            android:textAllCaps="true"
+            android:textColor="@color/discret"
+            android:textSize="11sp" />
 
         <TextView
             android:id="@+id/compte"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
-            android:textColor="@color/discret"
-            android:textSize="13sp" />
+            android:textColor="@color/pale"
+            android:textSize="11sp" />
     </LinearLayout>
 </FrameLayout>
